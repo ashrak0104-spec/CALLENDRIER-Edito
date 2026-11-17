@@ -1,4 +1,5 @@
 import type { EditorialPayload, PostItem } from '../types';
+import { gsheetReadRows } from './gsheet';
 
 export interface BackupResult {
   canceled: boolean;
@@ -27,14 +28,6 @@ export interface ClientMeta {
 
 export type ClientDataFailure = 'missing' | 'unreadable';
 
-export interface ClientDataResult {
-  ok: boolean;
-  data?: unknown;
-  reason?: ClientDataFailure;
-  file?: string;
-  error?: string;
-}
-
 export type ResolveClientInput = { mode: 'empty' } | { mode: 'restore'; items: PostItem[] };
 
 export interface DesktopApi {
@@ -49,6 +42,7 @@ export interface DesktopApi {
   pickAssets: () => Promise<string[]>;
   openTarget: (target: string) => Promise<void>;
   appVersion: () => Promise<string>;
+  gsheetReadRows: (spreadsheetId: string, range: string) => Promise<GsheetReadResult>;
   clientsList: () => Promise<ClientMeta[]>;
   clientsActive: () => Promise<string | null>;
   clientsSelect: (id: string) => Promise<ClientMeta>;
@@ -57,10 +51,22 @@ export interface DesktopApi {
   clientsDelete: (id: string) => Promise<{ ok: boolean; error?: string }>;
 }
 
+export interface ClientDataResult {
+  ok: boolean;
+  data?: unknown;
+  reason?: ClientDataFailure;
+  file?: string;
+  error?: string;
+}
+
 export interface ClientMutationResult {
   ok: boolean;
   client?: ClientMeta;
   error?: string;
+}
+
+export interface GsheetReadResult {
+  rows: unknown[][];
 }
 
 declare global {
@@ -170,10 +176,6 @@ function browserMeta(client: BrowserClient): ClientMeta {
   return { ...client, updatedAt, itemCount };
 }
 
-/**
- * Mode navigateur (`npm run dev` sans preload). Dans Electron, window.desktop
- * est toujours prioritaire et les données vivent dans userData.
- */
 const browserApi: DesktopApi = {
   loadClientData: async () => {
     const index = readBrowserIndex();
@@ -234,6 +236,7 @@ const browserApi: DesktopApi = {
     window.open(target, '_blank', 'noopener,noreferrer');
   },
   appVersion: async () => '1.0.0 (navigateur)',
+  gsheetReadRows,
   clientsList: async () => readBrowserIndex().clients.map(browserMeta),
   clientsActive: async () => readBrowserIndex().activeClientId,
   clientsSelect: async (id) => {

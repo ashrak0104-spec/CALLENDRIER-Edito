@@ -1,10 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { Building2, Loader2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
+import {
+  Building2,
+  Loader2,
+  Pencil,
+  Plus,
+  ShieldCheck,
+  Trash2,
+  X,
+} from 'lucide-react';
 import type { ClientMeta } from '../lib/api';
 
 interface ClientSelectScreenProps {
   clients: ClientMeta[];
   loading: boolean;
+  sheetSource?: { url: string; renameMap?: Record<string, string> };
   onSelect: (id: string) => void;
   onCreate: (name: string) => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
@@ -29,6 +38,7 @@ function lastUpdate(value: string): string {
 export default function ClientSelectScreen({
   clients,
   loading,
+  sheetSource,
   onSelect,
   onCreate,
   onRename,
@@ -107,6 +117,8 @@ export default function ClientSelectScreen({
     }
   };
 
+  const sheet = sheetSource ?? null;
+
   return (
     <div className="flex h-full flex-col overflow-y-auto bg-bg px-6 py-8">
       <div className="mx-auto w-full max-w-3xl">
@@ -120,9 +132,15 @@ export default function ClientSelectScreen({
               <p className="text-[11px] text-muted">Chaque client a son propre calendrier éditorial.</p>
             </div>
           </div>
-          <span className="hidden shrink-0 text-[11px] text-muted sm:inline">
-            Données locales
-          </span>
+          {sheet && (
+            <span className="shrink-0 text-[11px] text-muted">
+              Source : {new URL(sheet.url).searchParams.get('id') ? (
+                <>Fichier Google Sheets</>
+              ) : (
+                <>feuille de calcul partagée</>
+              )}
+            </span>
+          )}
         </div>
 
         {error && (

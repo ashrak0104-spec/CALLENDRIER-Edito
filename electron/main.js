@@ -5,6 +5,45 @@ const path = require('node:path');
 const fs = require('node:fs/promises');
 const clients = require('./clients');
 
+const gsheetConfigPath = () => path.join(app.getPath('userData'), 'gsheet-config.json');
+
+async function loadGsheetConfig() {
+  try {
+    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function readGsheetRows(google, spreadsheetId, range) {
+  const request = { spreadsheetId, ranges: [range], valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' };
+  const response = google.sheets('v4').spreadsheets.values.batchGet(request);
+  const batch = response.data.valueRanges || [];
+  const rows = [];
+  for (const entry of batch) {
+    if (entry.values) {
+      rows.push(entry.values);
+    }
+  }
+  return { rows: flattenRows(rows) };
+}
+
+function flattenRows(blocks) {
+  const out = [];
+  for (const block of blocks) {
+    for (const row of block) {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+
+/* Google Sheets : à compléter avec Google APIs
+
+Ce module est à compléter avec le SDK googleapis pour lire les cellules
+de la feuille configurée. Stocker les identifiants dans userData/gsheet-config.json.
+
 // The product name is used to derive app.getPath('userData').
 app.setName('Editorial Studio');
 
@@ -32,6 +71,58 @@ async function readJsonFile(targetPath) {
 const errorMessage = (error) =>
   error instanceof Error ? error.message : String(error ?? 'Erreur inconnue');
 
+async function loadGsheetConfig() {
+  try {
+    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function readGsheetRows(google, spreadsheetId, range) {
+  const request = { spreadsheetId, ranges: [range], valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' };
+  const response = google.sheets('v4').spreadsheets.values.batchGet(request);
+  const batch = response.data.valueRanges || [];
+  const rows = [];
+  for (const entry of batch) {
+    if (entry.values) {
+      rows.push(entry.values);
+    }
+  }
+  return { rows: flattenRows(rows) };
+}
+
+function flattenRows(blocks) {
+  const out = [];
+  for (const block of blocks) {
+    for (const row of block) {
+      out.push(row);
+    }
+  }
+  return out;
+}
+
+const gsheetConfigPath = () => path.join(app.getPath('userData'), 'gsheet-config.json');
+
+async function loadGsheetConfig() {
+  try {
+    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+async async function loadGsheetTransport(config) {
+  const { google } = require('googleapis');
+  const { GoogleAuth } = require('google-auth-library');
+  const auth = new GoogleAuth({ keyFile: config?.credentialsPath });
+  const authClient = await auth.getClient();
+  google.options.auth = authClient;
+  return google;
+}
+
+/* ------------------------------------------------------------------ */
+/* Lifecycle
 function today() {
   const d = new Date();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -228,6 +319,35 @@ ipcMain.handle('shell:open', async (_event, target) => {
 });
 
 ipcMain.handle('app:version', () => app.getVersion());
+
+ipcMain.handle('gsheet:read-rows', async (_event, spreadsheetId, range) => {
+  if (!spreadsheetId || typeof spreadsheetId !== 'string') {
+    throw new Error('Identifiant de feuille manquant.');
+  }
+  if (!range || typeof range !== 'string') {
+    throw new Error('Plage manquante.');
+  }
+  const config = await loadGsheetConfig();
+  if (!config?.credentialsPath) {
+    throw new Error('Compte Google non configuré.');
+  }
+  const transport = await loadGsheetTransport(config);
+  return readGsheetRows(transport, spreadsheetId, range);
+});
+
+  if (!spreadsheetId || typeof spreadsheetId !== 'string') {
+    throw new Error('Identifiant de feuille manquant.');
+  }
+  if (!range || typeof range !== 'string') {
+    throw new Error('Plage manquante.');
+  }
+  const config = await loadGsheetConfig();
+  if (!config?.credentialsPath) {
+    throw new Error('Compte Google non configuré.');
+  }
+  const google = await loadGsheetTransport(config);
+  return readGsheetRows(google, spreadsheetId, range);
+});
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                            */

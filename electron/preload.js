@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('desktop', {
   pickAssets: () => ipcRenderer.invoke('assets:pick'),
   openTarget: (target) => ipcRenderer.invoke('shell:open', target),
   appVersion: () => ipcRenderer.invoke('app:version'),
+  gsheetReadRows: (spreadsheetId, range) => ipcRenderer.invoke('gsheet:read-rows', spreadsheetId, range),
   clientsList: () => ipcRenderer.invoke('clients:list'),
   clientsActive: () => ipcRenderer.invoke('clients:active'),
   clientsSelect: (id) => ipcRenderer.invoke('clients:select', id),
