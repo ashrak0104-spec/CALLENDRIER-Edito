@@ -16,6 +16,8 @@ const dataPathFor = (id) => path.join(clientsDir(), `${id}.json`);
 const legacyPath = () => path.join(app.getPath('userData'), 'editorial-data.json');
 
 let indexPromise = null;
+/** Clients dont le fichier n'a pas pu être lu : aucune écriture tant qu'ils ne sont pas résolus. */
+const blocked = new Set();
 
 async function readJson(file) {
   try {
@@ -156,27 +158,99 @@ async function create(rawName) {
   return metaFor(client);
 }
 
-async function loadActiveData() {
+async function loadActive() {
   const index = await ensureIndex();
-  if (!index.activeClientId) return null;
-  const file = dataPathFor(index.activeClientId);
+  if (!index.activeClientId) {
+    return { ok: false, reason: 'missing', file: null, error: 'Aucun client actif.' };
+  }
+
+  const id = index.activeClientId;
+  const file = dataPathFor(id);
+
   try {
-    return await readStrict(file);
-  } catch (error) {
-    // Fichier illisible : on le met de côté plutôt que de l'écraser.
-    try {
-      await fs.rename(file, `${file}.corrupt-${Date.now()}.json`);
-    } catch {
-      /* ignore */
+    const data = await readStrict(file);
+    if (data === null) {
+      blocked.add(id);
+      return { ok: false, reason: 'missing', file };
     }
-    console.error('[clients] data:load failed', error);
+    if (typeof data !== 'object' || !Array.isArray(data.items)) {
+      blocked.add(id);
+      return {
+        ok: false,
+        reason: 'unreadable',
+        file,
+        error: 'Structure inattendue : le champ "items" est absent.',
+      };
+    }
+    blocked.delete(id);
+    return { ok: true, data, file };
+  } catch (error) {
+    // Le fichier reste intact : on ne le renomme ni ne l'écrase sans décision.
+    blocked.add(id);
+    console.error('[clients] load failed', error);
+    return {
+      ok: false,
+      reason: 'unreadable',
+      file,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+/** Conserve le fichier existant avant tout remplacement explicite. */
+async function preserveExisting(file) {
+  try {
+    await fs.access(file);
+  } catch {
     return null;
   }
+  const target = `${file}.preserved-${Date.now()}.json`;
+  await fs.rename(file, target);
+  return target;
+}
+
+async function resolveActive(input) {
+  const index = await ensureIndex();
+  if (!index.activeClientId) throw new Error('Aucun client actif.');
+  const id = index.activeClientId;
+  const file = dataPathFor(id);
+
+  let items;
+  if (input?.mode === 'empty') {
+    items = [];
+  } else if (input?.mode === 'restore') {
+    if (!Array.isArray(input.items)) {
+      throw new Error('Sauvegarde invalide : "items" doit être un tableau.');
+    }
+    items = input.items;
+  } else {
+    throw new Error('Mode de résolution inconnu.');
+  }
+
+  try {
+    await preserveExisting(file);
+  } catch (error) {
+    throw new Error(
+      `Impossible de conserver l'ancien fichier avant remplacement : ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+
+  const payload = { version: 1, updatedAt: new Date().toISOString(), items };
+  await writeJson(file, payload);
+  blocked.delete(id);
+  return { ok: true, data: payload, file };
 }
 
 async function saveActiveData(payload) {
   const index = await ensureIndex();
   if (!index.activeClientId) throw new Error('Aucun client actif.');
+  if (blocked.has(index.activeClientId)) {
+    throw new Error(
+      'Sauvegarde bloquée : le fichier de ce client doit être restauré, réparé ou remplacé explicitement.',
+    );
+  }
   await writeJson(dataPathFor(index.activeClientId), payload);
   return { path: dataPathFor(index.activeClientId) };
 }
@@ -188,6 +262,7 @@ module.exports = {
   currentDataPath,
   select,
   create,
-  loadActiveData,
+  loadActive,
+  resolveActive,
   saveActiveData,
 };

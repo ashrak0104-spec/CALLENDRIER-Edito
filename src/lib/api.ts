@@ -1,4 +1,4 @@
-import type { EditorialPayload } from '../types';
+import type { EditorialPayload, PostItem } from '../types';
 
 export interface BackupResult {
   canceled: boolean;
@@ -24,6 +24,18 @@ export interface ClientMeta {
   updatedAt: string;
   itemCount: number;
 }
+
+export type ClientDataFailure = 'missing' | 'unreadable';
+
+export interface ClientDataResult {
+  ok: boolean;
+  data?: unknown;
+  reason?: ClientDataFailure;
+  file?: string;
+  error?: string;
+}
+
+export type ResolveClientInput = { mode: 'empty' } | { mode: 'restore'; items: PostItem[] };
 
 export interface AuthStatus {
   authenticated: boolean;
@@ -55,7 +67,8 @@ export interface AuthConfigureResult {
 }
 
 export interface DesktopApi {
-  loadData: () => Promise<unknown>;
+  loadClientData: () => Promise<ClientDataResult>;
+  resolveClient: (input: ResolveClientInput) => Promise<ClientDataResult>;
   saveData: (payload: EditorialPayload) => Promise<SaveResult>;
   getDataPath: () => Promise<string>;
   revealDataFile: () => Promise<void>;
@@ -202,16 +215,30 @@ function browserMeta(client: BrowserClient): ClientMeta {
  * est toujours prioritaire et les données vivent dans userData.
  */
 const browserApi: DesktopApi = {
-  loadData: async () => {
+  loadClientData: async () => {
     const index = readBrowserIndex();
-    if (!index.activeClientId) return null;
-    const raw = localStorage.getItem(clientDataKey(index.activeClientId));
-    if (!raw) return null;
+    if (!index.activeClientId) return { ok: false, reason: 'missing', file: '' };
+    const file = clientDataKey(index.activeClientId);
+    const raw = localStorage.getItem(file);
+    if (!raw) return { ok: false, reason: 'missing', file };
     try {
-      return JSON.parse(raw);
+      const data = JSON.parse(raw) as { items?: unknown };
+      if (!data || !Array.isArray(data.items)) {
+        return { ok: false, reason: 'unreadable', file };
+      }
+      return { ok: true, data, file };
     } catch {
-      return null;
+      return { ok: false, reason: 'unreadable', file };
     }
+  },
+  resolveClient: async (input) => {
+    const index = readBrowserIndex();
+    if (!index.activeClientId) return { ok: false, reason: 'missing', file: '' };
+    const items = input.mode === 'empty' ? [] : input.items;
+    const payload = { version: 1, updatedAt: new Date().toISOString(), items };
+    const file = clientDataKey(index.activeClientId);
+    localStorage.setItem(file, JSON.stringify(payload));
+    return { ok: true, data: payload, file };
   },
   saveData: async (payload) => {
     const index = readBrowserIndex();

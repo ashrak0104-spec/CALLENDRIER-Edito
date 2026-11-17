@@ -5,7 +5,8 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Only these narrow, data-only channels are exposed to the renderer.
 // No Node.js API, no ipcRenderer object, no arbitrary filesystem access.
 contextBridge.exposeInMainWorld('desktop', {
-  loadData: () => ipcRenderer.invoke('data:load'),
+  loadClientData: () => ipcRenderer.invoke('clients:load'),
+  resolveClient: (input) => ipcRenderer.invoke('clients:resolve', input),
   saveData: (payload) => ipcRenderer.invoke('data:save', payload),
   getDataPath: () => ipcRenderer.invoke('data:path'),
   revealDataFile: () => ipcRenderer.invoke('data:reveal'),

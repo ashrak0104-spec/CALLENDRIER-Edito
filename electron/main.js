@@ -88,8 +88,6 @@ function createWindow() {
 /* IPC : persistence                                                    */
 /* ------------------------------------------------------------------ */
 
-ipcMain.handle('data:load', () => clients.loadActiveData());
-
 ipcMain.handle('data:save', async (_event, payload) => {
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.items)) {
     throw new Error('Payload invalide : "items" doit être un tableau.');
@@ -119,6 +117,15 @@ ipcMain.handle('data:reveal', async () => {
 /* ------------------------------------------------------------------ */
 
 ipcMain.handle('clients:list', () => clients.list());
+ipcMain.handle('clients:load', () => clients.loadActive());
+
+ipcMain.handle('clients:resolve', async (_event, input) => {
+  try {
+    return await clients.resolveActive(input);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
 ipcMain.handle('clients:active', () => clients.activeId());
 
 ipcMain.handle('clients:select', async (_event, id) => {

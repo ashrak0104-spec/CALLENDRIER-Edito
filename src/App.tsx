@@ -5,6 +5,7 @@ import ItemDrawer from './components/ItemDrawer';
 import SettingsModal from './components/SettingsModal';
 import LoginScreen from './components/LoginScreen';
 import ClientSelectScreen from './components/ClientSelectScreen';
+import ClientDataErrorScreen from './components/ClientDataErrorScreen';
 import { api, type AuthStatus } from './lib/api';
 import CalendarView from './views/CalendarView';
 import KanbanView from './views/KanbanView';
@@ -55,9 +56,13 @@ export default function App() {
     clients,
     clientsLoading,
     activeClient,
+    loadError,
     selectClient,
     createClient,
     openClientPicker,
+    retryClientLoad,
+    restoreClientFromBackup,
+    startEmptyClient,
   } = useEditorial();
   const [view, setView] = useState<ViewId>('calendar');
   const [theme, setTheme] = useState<Theme>(readTheme);
@@ -143,6 +148,21 @@ export default function App() {
         onSelect={(id) => void selectClient(id)}
         onCreate={createClient}
         onSignOut={() => void signOut()}
+      />
+    );
+  }
+
+  if (loadError) {
+    return (
+      <ClientDataErrorScreen
+        clientName={activeClient.name}
+        file={loadError.file}
+        reason={loadError.reason}
+        detail={loadError.error}
+        onRetry={retryClientLoad}
+        onRestore={restoreClientFromBackup}
+        onStartEmpty={startEmptyClient}
+        onChangeClient={() => void openClientPicker()}
       />
     );
   }
