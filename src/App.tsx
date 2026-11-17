@@ -3,10 +3,8 @@ import { CalendarDays, Plus } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ItemDrawer from './components/ItemDrawer';
 import SettingsModal from './components/SettingsModal';
-import LoginScreen from './components/LoginScreen';
 import ClientSelectScreen from './components/ClientSelectScreen';
 import ClientDataErrorScreen from './components/ClientDataErrorScreen';
-import { api, type AuthStatus } from './lib/api';
 import CalendarView from './views/CalendarView';
 import KanbanView from './views/KanbanView';
 import TableView from './views/TableView';
@@ -70,30 +68,6 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [auth, setAuth] = useState<AuthStatus | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .authStatus()
-      .then((status) => {
-        if (!cancelled) setAuth(status);
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAuth({
-            authenticated: false,
-            email: null,
-            configured: false,
-            senderEmail: '',
-            dev: false,
-          });
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -109,49 +83,15 @@ export default function App() {
     setDrawer({ itemId: created.id, tab: 'edit' });
   };
 
-  const signOut = async () => {
-    await api.authLogout().catch(() => undefined);
-    await openClientPicker().catch(() => undefined);
-    setSettingsOpen(false);
-    setDrawer(null);
-    setAuth((current) =>
-      current ? { ...current, authenticated: false, email: null } : current,
-    );
-  };
-
-  if (auth === null) {
-    return (
-      <div className="flex h-full items-center justify-center bg-bg">
-        <div className="flex flex-col items-center gap-3">
-          <div className="flex h-12 w-12 animate-pulse items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white">
-            <CalendarDays size={24} />
-          </div>
-          <p className="text-sm font-medium text-muted">Ouverture de la session…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!auth.authenticated) {
-    return (
-      <LoginScreen
-        status={auth}
-        onSignedIn={(email) => setAuth({ ...auth, authenticated: true, email })}
-      />
-    );
-  }
-
   if (!activeClient) {
     return (
       <ClientSelectScreen
         clients={clients}
         loading={clientsLoading}
-        email={auth.email}
         onSelect={(id) => void selectClient(id)}
         onCreate={createClient}
         onRename={renameClient}
         onDelete={deleteClient}
-        onSignOut={() => void signOut()}
       />
     );
   }
@@ -235,11 +175,7 @@ export default function App() {
         />
       )}
 
-      {settingsOpen &&             <SettingsModal
-              email={auth.email}
-              onSignOut={() => void signOut()}
-              onClose={() => setSettingsOpen(false)}
-            />}
+      {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );
 }

@@ -4,7 +4,6 @@ import {
   Download,
   FolderOpen,
   HardDrive,
-  LogOut,
   ShieldCheck,
   Table2,
   Upload,
@@ -18,12 +17,10 @@ import { useEditorial } from '../store/editorial';
 import type { PostItem } from '../types';
 
 interface SettingsModalProps {
-  email?: string | null;
-  onSignOut?: () => void;
   onClose: () => void;
 }
 
-export default function SettingsModal({ email, onSignOut, onClose }: SettingsModalProps) {
+export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { items, replaceAll, dataPath, saveState } = useEditorial();
   const toast = useToast();
   const [version, setVersion] = useState('…');
@@ -239,26 +236,6 @@ export default function SettingsModal({ email, onSignOut, onClose }: SettingsMod
               </div>
             )}
           </section>
-
-          {email && (
-            <section className="border-t border-line pt-4">
-              <h3 className="text-sm font-semibold">Compte</h3>
-              <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-line bg-raised/40 px-3 py-2">
-                <div className="min-w-0">
-                  <p className="truncate text-xs font-medium">{email}</p>
-                  <p className="text-[10px] text-muted">Connexion par code email</p>
-                </div>
-                <button
-                  type="button"
-                  className="btn-ghost !px-2 !py-1 text-[11px]"
-                  onClick={onSignOut}
-                >
-                  <LogOut size={12} />
-                  Se déconnecter
-                </button>
-              </div>
-            </section>
-          )}
 
           <section className="border-t border-line pt-4">
             <h3 className="text-sm font-semibold">Application</h3>

@@ -1,25 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import {
-  Building2,
-  Loader2,
-  LogOut,
-  Pencil,
-  Plus,
-  ShieldCheck,
-  Trash2,
-  X,
-} from 'lucide-react';
+import { Building2, Loader2, Pencil, Plus, ShieldCheck, Trash2, X } from 'lucide-react';
 import type { ClientMeta } from '../lib/api';
 
 interface ClientSelectScreenProps {
   clients: ClientMeta[];
   loading: boolean;
-  email: string | null;
   onSelect: (id: string) => void;
   onCreate: (name: string) => Promise<void>;
   onRename: (id: string, name: string) => Promise<void>;
   onDelete: (id: string) => Promise<void>;
-  onSignOut: () => void;
 }
 
 function initials(name: string): string {
@@ -40,12 +29,10 @@ function lastUpdate(value: string): string {
 export default function ClientSelectScreen({
   clients,
   loading,
-  email,
   onSelect,
   onCreate,
   onRename,
   onDelete,
-  onSignOut,
 }: ClientSelectScreenProps) {
   const [creating, setCreating] = useState(false);
   const [name, setName] = useState('');
@@ -133,16 +120,9 @@ export default function ClientSelectScreen({
               <p className="text-[11px] text-muted">Chaque client a son propre calendrier éditorial.</p>
             </div>
           </div>
-          <div className="flex shrink-0 flex-col items-end gap-1">
-            {email && <p className="max-w-[220px] truncate text-[11px] text-muted">{email}</p>}
-            <button
-              type="button"
-              className="inline-flex items-center gap-1 text-[11px] font-medium text-muted transition hover:text-ink"
-              onClick={onSignOut}
-            >
-              <LogOut size={12} /> Se déconnecter
-            </button>
-          </div>
+          <span className="hidden shrink-0 text-[11px] text-muted sm:inline">
+            Données locales
+          </span>
         </div>
 
         {error && (

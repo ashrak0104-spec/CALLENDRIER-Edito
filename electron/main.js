@@ -3,7 +3,6 @@
 const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
-const auth = require('./auth');
 const clients = require('./clients');
 
 // The product name is used to derive app.getPath('userData').
@@ -29,6 +28,9 @@ async function readJsonFile(targetPath) {
   const raw = await fs.readFile(targetPath, 'utf8');
   return JSON.parse(raw);
 }
+
+const errorMessage = (error) =>
+  error instanceof Error ? error.message : String(error ?? 'Erreur inconnue');
 
 function today() {
   const d = new Date();
@@ -226,43 +228,6 @@ ipcMain.handle('shell:open', async (_event, target) => {
 });
 
 ipcMain.handle('app:version', () => app.getVersion());
-
-/* ------------------------------------------------------------------ */
-/* IPC : authentification par code email                                */
-/* ------------------------------------------------------------------ */
-
-const errorMessage = (error) =>
-  error instanceof Error ? error.message : String(error ?? 'Erreur inconnue');
-
-ipcMain.handle('auth:status', () => auth.status());
-
-ipcMain.handle('auth:request-code', async (_event, email) => {
-  try {
-    return await auth.requestCode(email);
-  } catch (error) {
-    return { ok: false, error: errorMessage(error) };
-  }
-});
-
-ipcMain.handle('auth:verify', async (_event, email, code) => {
-  try {
-    return await auth.verifyCode(email, code);
-  } catch (error) {
-    return { ok: false, error: errorMessage(error) };
-  }
-});
-
-ipcMain.handle('auth:logout', () => auth.logout());
-
-ipcMain.handle('auth:config', () => auth.getPublicConfig());
-
-ipcMain.handle('auth:configure', async (_event, input) => {
-  try {
-    return { ok: true, ...(await auth.configure(input)) };
-  } catch (error) {
-    return { ok: false, configured: false, error: errorMessage(error) };
-  }
-});
 
 /* ------------------------------------------------------------------ */
 /* Lifecycle                                                            */

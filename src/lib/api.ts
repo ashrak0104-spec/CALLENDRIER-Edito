@@ -37,35 +37,6 @@ export interface ClientDataResult {
 
 export type ResolveClientInput = { mode: 'empty' } | { mode: 'restore'; items: PostItem[] };
 
-export interface AuthStatus {
-  authenticated: boolean;
-  email: string | null;
-  configured: boolean;
-  senderEmail: string;
-  dev: boolean;
-}
-
-export interface AuthCodeResult {
-  ok: boolean;
-  error?: string;
-  devCode?: string;
-  retryAfterSeconds?: number;
-  ttlMinutes?: number;
-}
-
-export interface AuthVerifyResult {
-  ok: boolean;
-  email?: string;
-  error?: string;
-}
-
-export interface AuthConfigureResult {
-  configured: boolean;
-  senderEmail: string;
-  senderName: string;
-  error?: string;
-}
-
 export interface DesktopApi {
   loadClientData: () => Promise<ClientDataResult>;
   resolveClient: (input: ResolveClientInput) => Promise<ClientDataResult>;
@@ -78,20 +49,6 @@ export interface DesktopApi {
   pickAssets: () => Promise<string[]>;
   openTarget: (target: string) => Promise<void>;
   appVersion: () => Promise<string>;
-  authStatus: () => Promise<AuthStatus>;
-  authRequestCode: (email: string) => Promise<AuthCodeResult>;
-  authVerify: (email: string, code: string) => Promise<AuthVerifyResult>;
-  authLogout: () => Promise<{ ok: boolean }>;
-  authConfig: () => Promise<AuthConfigureResult>;
-  authConfigure: (config: {
-    host: string;
-    port: number;
-    secure: boolean;
-    user: string;
-    pass: string;
-    senderEmail: string;
-    senderName: string;
-  }) => Promise<AuthConfigureResult>;
   clientsList: () => Promise<ClientMeta[]>;
   clientsActive: () => Promise<string | null>;
   clientsSelect: (id: string) => Promise<ClientMeta>;
@@ -113,12 +70,7 @@ declare global {
 }
 
 const LS_KEY = 'editorial-studio:data:v1';
-const AUTH_KEY = 'editorial-studio:auth:v1';
 const CLIENTS_KEY = 'editorial-studio:clients:v1';
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-/** Code du mode navigateur (développement uniquement, jamais utilisé dans Electron). */
-let browserCode: { email: string; code: string } | null = null;
 
 function download(filename: string, content: string, type: string): void {
   const blob = new Blob([content], { type });
@@ -282,54 +234,6 @@ const browserApi: DesktopApi = {
     window.open(target, '_blank', 'noopener,noreferrer');
   },
   appVersion: async () => '1.0.0 (navigateur)',
-  authStatus: async () => {
-    const raw = localStorage.getItem(AUTH_KEY);
-    if (!raw) {
-      return { authenticated: false, email: null, configured: true, senderEmail: '', dev: true };
-    }
-    try {
-      const session = JSON.parse(raw) as { email?: unknown };
-      return {
-        authenticated: typeof session.email === 'string' && Boolean(session.email),
-        email: typeof session.email === 'string' ? session.email : null,
-        configured: true,
-        senderEmail: '',
-        dev: true,
-      };
-    } catch {
-      return { authenticated: false, email: null, configured: true, senderEmail: '', dev: true };
-    }
-  },
-  authRequestCode: async (email) => {
-    const normalized = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(normalized)) return { ok: false, error: 'Adresse email invalide.' };
-    const code = String(Math.floor(Math.random() * 1_000_000)).padStart(6, '0');
-    browserCode = { email: normalized, code };
-    return { ok: true, devCode: code, ttlMinutes: 10 };
-  },
-  authVerify: async (email, code) => {
-    if (!browserCode || browserCode.email !== email.trim().toLowerCase()) {
-      return { ok: false, error: 'Demandez un nouveau code de connexion.' };
-    }
-    if (browserCode.code !== code) {
-      return { ok: false, error: 'Code incorrect.' };
-    }
-    localStorage.setItem(AUTH_KEY, JSON.stringify({ email: browserCode.email }));
-    const signedEmail = browserCode.email;
-    browserCode = null;
-    return { ok: true, email: signedEmail };
-  },
-  authLogout: async () => {
-    localStorage.removeItem(AUTH_KEY);
-    browserCode = null;
-    return { ok: true };
-  },
-  authConfig: async () => ({ configured: true, senderEmail: '', senderName: '' }),
-  authConfigure: async (config) => ({
-    configured: true,
-    senderEmail: config.senderEmail,
-    senderName: config.senderName,
-  }),
   clientsList: async () => readBrowserIndex().clients.map(browserMeta),
   clientsActive: async () => readBrowserIndex().activeClientId,
   clientsSelect: async (id) => {

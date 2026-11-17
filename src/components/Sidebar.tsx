@@ -62,6 +62,12 @@ export default function Sidebar({
     dashboard: null,
   };
 
+  const dataLabel = isDesktop
+    ? dataPath
+      ? `clients/${dataPath.split(/[\\/]/).pop()}`
+      : 'userData'
+    : 'Mode navigateur · localStorage';
+
   const saveLabel =
     saveState === 'saving'
       ? 'Enregistrement…'
@@ -144,7 +150,7 @@ export default function Sidebar({
           <p className="text-[11px] font-medium text-ink">{saveLabel}</p>
         </div>
         <p className="mt-1.5 line-clamp-2 text-[10px] leading-relaxed text-muted" title={dataPath}>
-          {isDesktop ? 'editorial-data.json · userData' : 'Mode navigateur · localStorage'}
+          {dataLabel}
         </p>
       </div>
 
