@@ -279,7 +279,9 @@ export default function SettingsModal({ email, onSignOut, onClose }: SettingsMod
               </div>
               <div className="rounded-lg border border-line bg-raised/40 px-3 py-2">
                 <dt className="text-[10px] uppercase tracking-wider text-muted">Fichier</dt>
-                <dd className="truncate font-semibold text-ink">editorial-data.json</dd>
+                <dd className="truncate font-semibold text-ink">
+                  {dataPath.split(/[\\/]/).pop() || '—'}
+                </dd>
               </div>
             </dl>
           </section>

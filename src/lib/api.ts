@@ -17,6 +17,14 @@ export interface SaveResult {
   path: string;
 }
 
+export interface ClientMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  itemCount: number;
+}
+
 export interface AuthStatus {
   authenticated: boolean;
   email: string | null;
@@ -67,6 +75,10 @@ export interface DesktopApi {
     senderEmail: string;
     senderName: string;
   }) => Promise<AuthConfigureResult>;
+  clientsList: () => Promise<ClientMeta[]>;
+  clientsActive: () => Promise<string | null>;
+  clientsSelect: (id: string) => Promise<ClientMeta>;
+  clientsCreate: (name: string) => Promise<ClientMeta>;
 }
 
 declare global {
@@ -77,6 +89,7 @@ declare global {
 
 const LS_KEY = 'editorial-studio:data:v1';
 const AUTH_KEY = 'editorial-studio:auth:v1';
+const CLIENTS_KEY = 'editorial-studio:clients:v1';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
 /** Code du mode navigateur (développement uniquement, jamais utilisé dans Electron). */
@@ -115,20 +128,99 @@ function pickJsonFile(): Promise<unknown> {
   });
 }
 
+/* ------------------------------------------------------------------ */
+/* Mode navigateur : clients locaux dans localStorage                   */
+/* ------------------------------------------------------------------ */
+
+interface BrowserClient {
+  id: string;
+  name: string;
+  createdAt: string;
+}
+
+interface BrowserIndex {
+  activeClientId: string | null;
+  clients: BrowserClient[];
+}
+
+const clientDataKey = (id: string) => `editorial-studio:data:v1:${id}`;
+
+function writeBrowserIndex(index: BrowserIndex): void {
+  localStorage.setItem(CLIENTS_KEY, JSON.stringify(index));
+}
+
+function readBrowserIndex(): BrowserIndex {
+  const raw = localStorage.getItem(CLIENTS_KEY);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw) as BrowserIndex;
+      if (parsed && Array.isArray(parsed.clients)) return parsed;
+    } catch {
+      /* réindexe plus bas */
+    }
+  }
+
+  const index: BrowserIndex = { activeClientId: null, clients: [] };
+  const legacy = localStorage.getItem(LS_KEY);
+  if (legacy) {
+    const client: BrowserClient = {
+      id: `client_${Date.now().toString(36)}_legacy`,
+      name: 'Mon calendrier',
+      createdAt: new Date().toISOString(),
+    };
+    localStorage.setItem(clientDataKey(client.id), legacy);
+    localStorage.removeItem(LS_KEY);
+    index.clients.push(client);
+    index.activeClientId = client.id;
+  }
+  writeBrowserIndex(index);
+  return index;
+}
+
+function browserMeta(client: BrowserClient): ClientMeta {
+  let itemCount = 0;
+  let updatedAt = client.createdAt;
+  const raw = localStorage.getItem(clientDataKey(client.id));
+  if (raw) {
+    try {
+      const payload = JSON.parse(raw) as { items?: unknown; updatedAt?: unknown };
+      if (Array.isArray(payload.items)) itemCount = payload.items.length;
+      if (typeof payload.updatedAt === 'string') updatedAt = payload.updatedAt;
+    } catch {
+      /* fichier illisible : compte zéro */
+    }
+  }
+  return { ...client, updatedAt, itemCount };
+}
+
 /**
- * Browser fallback used by `npm run dev` in a normal browser tab (no preload).
- * Inside Electron, window.desktop always wins and data lives in userData.
+ * Mode navigateur (`npm run dev` sans preload). Dans Electron, window.desktop
+ * est toujours prioritaire et les données vivent dans userData.
  */
 const browserApi: DesktopApi = {
   loadData: async () => {
-    const raw = localStorage.getItem(LS_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const index = readBrowserIndex();
+    if (!index.activeClientId) return null;
+    const raw = localStorage.getItem(clientDataKey(index.activeClientId));
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return null;
+    }
   },
   saveData: async (payload) => {
-    localStorage.setItem(LS_KEY, JSON.stringify(payload));
-    return { ok: true, path: 'localStorage (mode navigateur)' };
+    const index = readBrowserIndex();
+    if (!index.activeClientId) throw new Error('Aucun client actif.');
+    localStorage.setItem(clientDataKey(index.activeClientId), JSON.stringify(payload));
+    return { ok: true, path: `localStorage · ${clientDataKey(index.activeClientId)}` };
   },
-  getDataPath: async () => 'localStorage · editorial-studio:data:v1 (mode navigateur)',
+  getDataPath: async () => {
+    const index = readBrowserIndex();
+    return index.activeClientId
+      ? `localStorage · ${clientDataKey(index.activeClientId)}`
+      : 'localStorage (aucun client)';
+  },
   revealDataFile: async () => undefined,
   exportBackup: async (payload) => {
     download(
@@ -146,6 +238,11 @@ const browserApi: DesktopApi = {
     download(suggestedName, csv, 'text/csv;charset=utf-8');
     return { canceled: false };
   },
+  pickAssets: async () => [],
+  openTarget: async (target) => {
+    window.open(target, '_blank', 'noopener,noreferrer');
+  },
+  appVersion: async () => '1.0.0 (navigateur)',
   authStatus: async () => {
     const raw = localStorage.getItem(AUTH_KEY);
     if (!raw) {
@@ -194,11 +291,34 @@ const browserApi: DesktopApi = {
     senderEmail: config.senderEmail,
     senderName: config.senderName,
   }),
-  pickAssets: async () => [],
-  openTarget: async (target) => {
-    window.open(target, '_blank', 'noopener,noreferrer');
+  clientsList: async () => readBrowserIndex().clients.map(browserMeta),
+  clientsActive: async () => readBrowserIndex().activeClientId,
+  clientsSelect: async (id) => {
+    const index = readBrowserIndex();
+    const client = index.clients.find((entry) => entry.id === id);
+    if (!client) throw new Error('Client introuvable.');
+    index.activeClientId = client.id;
+    writeBrowserIndex(index);
+    return browserMeta(client);
   },
-  appVersion: async () => '1.0.0 (navigateur)',
+  clientsCreate: async (name) => {
+    const cleaned = name.trim().replace(/\s+/g, ' ');
+    if (!cleaned) throw new Error('Le nom du client est obligatoire.');
+    const index = readBrowserIndex();
+    const client: BrowserClient = {
+      id: `client_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 8)}`,
+      name: cleaned.slice(0, 60),
+      createdAt: new Date().toISOString(),
+    };
+    localStorage.setItem(
+      clientDataKey(client.id),
+      JSON.stringify({ version: 1, updatedAt: client.createdAt, items: [] }),
+    );
+    index.clients.push(client);
+    index.activeClientId = client.id;
+    writeBrowserIndex(index);
+    return browserMeta(client);
+  },
 };
 
 export const api: DesktopApi =

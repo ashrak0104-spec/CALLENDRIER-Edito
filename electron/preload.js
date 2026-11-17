@@ -21,4 +21,8 @@ contextBridge.exposeInMainWorld('desktop', {
   authLogout: () => ipcRenderer.invoke('auth:logout'),
   authConfig: () => ipcRenderer.invoke('auth:config'),
   authConfigure: (config) => ipcRenderer.invoke('auth:configure', config),
+  clientsList: () => ipcRenderer.invoke('clients:list'),
+  clientsActive: () => ipcRenderer.invoke('clients:active'),
+  clientsSelect: (id) => ipcRenderer.invoke('clients:select', id),
+  clientsCreate: (name) => ipcRenderer.invoke('clients:create', name),
 });

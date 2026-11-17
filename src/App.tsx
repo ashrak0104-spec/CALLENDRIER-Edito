@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import ItemDrawer from './components/ItemDrawer';
 import SettingsModal from './components/SettingsModal';
 import LoginScreen from './components/LoginScreen';
+import ClientSelectScreen from './components/ClientSelectScreen';
 import { api, type AuthStatus } from './lib/api';
 import CalendarView from './views/CalendarView';
 import KanbanView from './views/KanbanView';
@@ -47,7 +48,17 @@ interface DrawerState {
 }
 
 export default function App() {
-  const { items, ready, createItem } = useEditorial();
+  const {
+    items,
+    ready,
+    createItem,
+    clients,
+    clientsLoading,
+    activeClient,
+    selectClient,
+    createClient,
+    openClientPicker,
+  } = useEditorial();
   const [view, setView] = useState<ViewId>('calendar');
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
@@ -91,6 +102,16 @@ export default function App() {
     setDrawer({ itemId: created.id, tab: 'edit' });
   };
 
+  const signOut = async () => {
+    await api.authLogout().catch(() => undefined);
+    await openClientPicker().catch(() => undefined);
+    setSettingsOpen(false);
+    setDrawer(null);
+    setAuth((current) =>
+      current ? { ...current, authenticated: false, email: null } : current,
+    );
+  };
+
   if (auth === null) {
     return (
       <div className="flex h-full items-center justify-center bg-bg">
@@ -109,6 +130,19 @@ export default function App() {
       <LoginScreen
         status={auth}
         onSignedIn={(email) => setAuth({ ...auth, authenticated: true, email })}
+      />
+    );
+  }
+
+  if (!activeClient) {
+    return (
+      <ClientSelectScreen
+        clients={clients}
+        loading={clientsLoading}
+        email={auth.email}
+        onSelect={(id) => void selectClient(id)}
+        onCreate={createClient}
+        onSignOut={() => void signOut()}
       />
     );
   }
@@ -136,6 +170,8 @@ export default function App() {
         theme={theme}
         onToggleTheme={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
         onOpenSettings={() => setSettingsOpen(true)}
+        clientName={activeClient.name}
+        onSwitchClient={() => void openClientPicker()}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
@@ -177,15 +213,7 @@ export default function App() {
 
       {settingsOpen &&             <SettingsModal
               email={auth.email}
-              onSignOut={() => {
-                void api.authLogout().finally(() => {
-                  setSettingsOpen(false);
-                  setDrawer(null);
-                  setAuth((current) =>
-                    current ? { ...current, authenticated: false, email: null } : current,
-                  );
-                });
-              }}
+              onSignOut={() => void signOut()}
               onClose={() => setSettingsOpen(false)}
             />}
     </div>

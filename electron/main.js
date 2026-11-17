@@ -4,15 +4,13 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const auth = require('./auth');
+const clients = require('./clients');
 
 // The product name is used to derive app.getPath('userData').
 app.setName('Editorial Studio');
 
-const DATA_FILE = 'editorial-data.json';
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 let mainWindow = null;
-
-const getDataPath = () => path.join(app.getPath('userData'), DATA_FILE);
 
 function focusedWindow() {
   return BrowserWindow.getFocusedWindow() || mainWindow;
@@ -90,40 +88,45 @@ function createWindow() {
 /* IPC : persistence                                                    */
 /* ------------------------------------------------------------------ */
 
-ipcMain.handle('data:load', async () => {
-  try {
-    return await readJsonFile(getDataPath());
-  } catch (error) {
-    if (error && error.code === 'ENOENT') return null;
-    // Unreadable/corrupted file: keep a copy before letting the app reseed.
-    try {
-      await fs.rename(getDataPath(), `${getDataPath()}.corrupt-${Date.now()}.json`);
-    } catch {
-      /* ignore: the original file stays untouched */
-    }
-    console.error('[editorial] data:load failed', error);
-    return null;
-  }
-});
+ipcMain.handle('data:load', () => clients.loadActiveData());
 
 ipcMain.handle('data:save', async (_event, payload) => {
   if (!payload || typeof payload !== 'object' || !Array.isArray(payload.items)) {
     throw new Error('Payload invalide : "items" doit être un tableau.');
   }
-  await writeJsonFile(getDataPath(), payload);
-  return { ok: true, path: getDataPath() };
+  const result = await clients.saveActiveData(payload);
+  return { ok: true, path: result.path };
 });
 
-ipcMain.handle('data:path', () => getDataPath());
+ipcMain.handle('data:path', async () => (await clients.currentDataPath()) ?? '');
 
 ipcMain.handle('data:reveal', async () => {
+  const file = await clients.currentDataPath();
+  if (!file) {
+    await shell.openPath(app.getPath('userData'));
+    return;
+  }
   try {
-    await fs.access(getDataPath());
-    shell.showItemInFolder(getDataPath());
+    await fs.access(file);
+    shell.showItemInFolder(file);
   } catch {
     shell.openPath(app.getPath('userData'));
   }
 });
+
+/* ------------------------------------------------------------------ */
+/* IPC : clients                                                        */
+/* ------------------------------------------------------------------ */
+
+ipcMain.handle('clients:list', () => clients.list());
+ipcMain.handle('clients:active', () => clients.activeId());
+
+ipcMain.handle('clients:select', async (_event, id) => {
+  if (typeof id !== 'string' || !id) throw new Error('Identifiant client invalide.');
+  return clients.select(id);
+});
+
+ipcMain.handle('clients:create', async (_event, name) => clients.create(name));
 
 /* ------------------------------------------------------------------ */
 /* IPC : backup / CSV                                                   */

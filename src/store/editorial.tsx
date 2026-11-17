@@ -9,9 +9,8 @@ import {
   type ReactNode,
 } from 'react';
 import { DEFAULT_ASSIGNEE } from '../constants';
-import { api } from '../lib/api';
+import { api, type ClientMeta } from '../lib/api';
 import { parsePayload } from '../lib/normalize';
-import { buildSeedData } from '../lib/seed';
 import { uid } from '../lib/utils';
 import type { Platform, PostItem } from '../types';
 
@@ -22,6 +21,12 @@ interface EditorialContextValue {
   ready: boolean;
   saveState: SaveState;
   dataPath: string;
+  clients: ClientMeta[];
+  clientsLoading: boolean;
+  activeClient: ClientMeta | null;
+  selectClient: (id: string) => Promise<void>;
+  createClient: (name: string) => Promise<void>;
+  openClientPicker: () => Promise<void>;
   createItem: (partial?: Partial<PostItem>) => PostItem;
   updateItem: (id: string, patch: Partial<PostItem>) => void;
   deleteItem: (id: string) => void;
@@ -52,49 +57,101 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
   const [dataPath, setDataPath] = useState('');
+  const [clients, setClients] = useState<ClientMeta[]>([]);
+  const [clientsLoading, setClientsLoading] = useState(true);
+  const [activeClient, setActiveClient] = useState<ClientMeta | null>(null);
+  const timerRef = useRef<number | null>(null);
   const bootstrapped = useRef(false);
 
+  // La liste des clients est chargée au démarrage ; le contenu n'est chargé
+  // qu'après le choix explicite d'un client.
   useEffect(() => {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
-
     (async () => {
       try {
-        const [payload, path] = await Promise.all([api.loadData(), api.getDataPath()]);
-        setDataPath(path);
-        const loaded = parsePayload(payload);
-        // `[]` is a real (emptied) workspace; only a missing/unreadable file seeds demo data.
-        if (loaded !== null) {
-          setItems(loaded);
-        } else {
-          const seeded = buildSeedData();
-          setItems(seeded);
-          await api.saveData({
-            version: 1,
-            updatedAt: new Date().toISOString(),
-            items: seeded,
-          });
-        }
+        setClients(await api.clientsList());
       } catch (error) {
-        console.error('[editorial] chargement impossible', error);
-        setItems((previous) => (previous.length > 0 ? previous : buildSeedData()));
+        console.error('[editorial] liste des clients indisponible', error);
       } finally {
-        setReady(true);
+        setClientsLoading(false);
       }
     })();
   }, []);
 
-  // Debounced autosave to editorial-data.json via the preload bridge.
-  useEffect(() => {
-    if (!ready) return;
-    setSaveState('saving');
-    const timer = window.setTimeout(async () => {
+  const flush = useCallback(async () => {
+    if (!ready || !activeClient) return;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    try {
+      await api.saveData({ version: 1, updatedAt: new Date().toISOString(), items });
+    } catch (error) {
+      console.error('[editorial] sauvegarde avant changement de client impossible', error);
+    }
+  }, [ready, activeClient, items]);
+
+  const enterClient = useCallback(async (meta: ClientMeta) => {
+    const [payload, path] = await Promise.all([api.loadData(), api.getDataPath()]);
+    const loaded = parsePayload(payload);
+    setItems(loaded ?? []);
+    setDataPath(path);
+    setActiveClient(meta);
+    setSaveState('idle');
+    setReady(true);
+  }, []);
+
+  const selectClient = useCallback(
+    async (id: string) => {
+      await flush();
+      const meta = await api.clientsSelect(id);
+      await enterClient(meta);
       try {
-        await api.saveData({
-          version: 1,
-          updatedAt: new Date().toISOString(),
-          items,
-        });
+        setClients(await api.clientsList());
+      } catch {
+        /* la liste se rafraîchira au prochain passage */
+      }
+    },
+    [flush, enterClient],
+  );
+
+  const createClient = useCallback(
+    async (name: string) => {
+      await flush();
+      const meta = await api.clientsCreate(name);
+      await enterClient(meta);
+      try {
+        setClients(await api.clientsList());
+      } catch {
+        /* ignore */
+      }
+    },
+    [flush, enterClient],
+  );
+
+  const openClientPicker = useCallback(async () => {
+    await flush();
+    setActiveClient(null);
+    setReady(false);
+    setItems([]);
+    setSaveState('idle');
+    try {
+      setClients(await api.clientsList());
+    } catch {
+      /* ignore */
+    }
+  }, [flush]);
+
+  // Autosave débouncé dans le fichier du client actif.
+  useEffect(() => {
+    if (!ready || !activeClient) return;
+    setSaveState('saving');
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(async () => {
+      timerRef.current = null;
+      try {
+        await api.saveData({ version: 1, updatedAt: new Date().toISOString(), items });
         setSaveState('saved');
       } catch (error) {
         console.error('[editorial] sauvegarde impossible', error);
@@ -102,8 +159,13 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       }
     }, SAVE_DELAY);
 
-    return () => window.clearTimeout(timer);
-  }, [items, ready]);
+    return () => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [items, ready, activeClient]);
 
   const createItem = useCallback((partial: Partial<PostItem> = {}): PostItem => {
     const now = new Date().toISOString();
@@ -172,6 +234,12 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       ready,
       saveState,
       dataPath,
+      clients,
+      clientsLoading,
+      activeClient,
+      selectClient,
+      createClient,
+      openClientPicker,
       createItem,
       updateItem,
       deleteItem,
@@ -183,6 +251,12 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       ready,
       saveState,
       dataPath,
+      clients,
+      clientsLoading,
+      activeClient,
+      selectClient,
+      createClient,
+      openClientPicker,
       createItem,
       updateItem,
       deleteItem,
