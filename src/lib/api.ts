@@ -71,7 +71,11 @@ export interface DesktopApi {
   authLogout: () => Promise<{ ok: boolean }>;
   authConfig: () => Promise<AuthConfigureResult>;
   authConfigure: (config: {
-    apiKey: string;
+    host: string;
+    port: number;
+    secure: boolean;
+    user: string;
+    pass: string;
     senderEmail: string;
     senderName: string;
   }) => Promise<AuthConfigureResult>;

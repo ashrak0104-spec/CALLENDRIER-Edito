@@ -30,7 +30,11 @@ export default function LoginScreen({ status, onSignedIn }: LoginScreenProps) {
   const [now, setNow] = useState(Date.now());
   const [configured, setConfigured] = useState(status.configured);
   const [showSetup, setShowSetup] = useState(!status.configured);
-  const [apiKey, setApiKey] = useState('');
+  const [host, setHost] = useState('');
+  const [port, setPort] = useState('587');
+  const [secure, setSecure] = useState(false);
+  const [smtpUser, setSmtpUser] = useState('');
+  const [pass, setPass] = useState('');
   const [senderEmail, setSenderEmail] = useState(status.senderEmail);
   const [senderName, setSenderName] = useState('');
   const [savingSetup, setSavingSetup] = useState(false);
@@ -89,14 +93,22 @@ export default function LoginScreen({ status, onSignedIn }: LoginScreenProps) {
     setError(null);
     setSavingSetup(true);
     try {
-      const result = await api.authConfigure({ apiKey, senderEmail, senderName });
+      const result = await api.authConfigure({
+        host,
+        port: Number(port),
+        secure,
+        user: smtpUser,
+        pass,
+        senderEmail,
+        senderName,
+      });
       if (!result.configured) {
         setError(result.error ?? "Configuration refusée.");
         return;
       }
       setConfigured(true);
       setShowSetup(false);
-      setApiKey('');
+      setPass('');
       toast('Envoi des emails configuré.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Configuration impossible.');
@@ -190,7 +202,7 @@ export default function LoginScreen({ status, onSignedIn }: LoginScreenProps) {
 
               {status.dev && !configured && (
                 <p className="text-[10px] leading-relaxed text-muted">
-                  Mode développement : sans clé d'envoi, le code est affiché après la demande.
+                  Mode développement : sans serveur d'envoi configuré, le code est affiché après la demande.
                 </p>
               )}
             </form>
@@ -291,27 +303,79 @@ export default function LoginScreen({ status, onSignedIn }: LoginScreenProps) {
         {showSetup && (
           <div className="card mt-2 space-y-3 p-4">
             <div>
-              <h2 className="text-xs font-semibold">Envoi des codes par Brevo</h2>
+              <h2 className="text-xs font-semibold">Envoi des codes par SMTP</h2>
               <p className="mt-1 text-[10px] leading-relaxed text-muted">
-                Créez une clé API transactionnelle dans Brevo, puis vérifiez l'adresse expéditrice.
-                La clé est enregistrée uniquement dans le dossier de données de l'application, jamais
-                dans le projet.
+                L'application utilise ta propre boîte mail comme serveur d'envoi. Gmail : crée un
+                mot de passe d'application. OVH, Outlook et la plupart des hébergeurs fournissent
+                les identifiants SMTP dans leurs réglages. Le mot de passe est enregistré dans le
+                dossier de données de l'application, jamais dans le projet.
               </p>
             </div>
-            <div>
-              <label className="label" htmlFor="setup-key">
-                Clé API Brevo
-              </label>
-              <input
-                id="setup-key"
-                type="password"
-                autoComplete="off"
-                className="field font-mono text-xs"
-                placeholder="xkeysib-…"
-                value={apiKey}
-                onChange={(event) => setApiKey(event.target.value)}
-              />
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div className="sm:col-span-2">
+                <label className="label" htmlFor="setup-host">
+                  Serveur SMTP
+                </label>
+                <input
+                  id="setup-host"
+                  autoComplete="off"
+                  className="field"
+                  placeholder="smtp.gmail.com"
+                  value={host}
+                  onChange={(event) => setHost(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="setup-port">
+                  Port
+                </label>
+                <input
+                  id="setup-port"
+                  inputMode="numeric"
+                  className="field tabular-nums"
+                  placeholder="587"
+                  value={port}
+                  onChange={(event) => setPort(event.target.value.replace(/\D/g, '').slice(0, 5))}
+                />
+              </div>
             </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div>
+                <label className="label" htmlFor="setup-user">
+                  Identifiant SMTP
+                </label>
+                <input
+                  id="setup-user"
+                  autoComplete="off"
+                  className="field"
+                  placeholder="vous@gmail.com"
+                  value={smtpUser}
+                  onChange={(event) => setSmtpUser(event.target.value)}
+                />
+              </div>
+              <div>
+                <label className="label" htmlFor="setup-pass">
+                  Mot de passe SMTP
+                </label>
+                <input
+                  id="setup-pass"
+                  type="password"
+                  autoComplete="new-password"
+                  className="field"
+                  placeholder="Mot de passe d'application"
+                  value={pass}
+                  onChange={(event) => setPass(event.target.value)}
+                />
+              </div>
+            </div>
+            <label className="flex items-center gap-2 text-[11px] text-muted">
+              <input
+                type="checkbox"
+                checked={secure}
+                onChange={(event) => setSecure(event.target.checked)}
+              />
+              Connexion SSL/TLS directe (port 465)
+            </label>
             <div className="grid gap-2 sm:grid-cols-2">
               <div>
                 <label className="label" htmlFor="setup-sender">
@@ -339,18 +403,17 @@ export default function LoginScreen({ status, onSignedIn }: LoginScreenProps) {
                 />
               </div>
             </div>
-            <div className="flex items-center justify-between gap-2">
-              <button
-                type="button"
-                className="text-[10px] font-medium text-accent hover:underline"
-                onClick={() => void api.openTarget('https://app.brevo.com/senders')}
-              >
-                Ouvrir Brevo (expéditeurs vérifiés)
-              </button>
+            <div className="flex items-center justify-end gap-2">
               <button
                 type="button"
                 className="btn-ghost !px-2.5 !py-1 text-[11px]"
-                disabled={savingSetup || !apiKey.trim() || !senderEmail.trim()}
+                disabled={
+                  savingSetup ||
+                  !host.trim() ||
+                  !smtpUser.trim() ||
+                  !pass ||
+                  !senderEmail.trim()
+                }
                 onClick={() => void saveSetup()}
               >
                 {savingSetup ? <Loader2 size={12} className="animate-spin" /> : null}

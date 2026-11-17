@@ -4,6 +4,7 @@ const { app } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
+const nodemailer = require('nodemailer');
 
 const CODE_TTL_MS = 10 * 60 * 1000;
 const RESEND_COOLDOWN_MS = 60 * 1000;
@@ -44,16 +45,22 @@ function validEmail(value) {
 async function loadConfig() {
   const config = await readJson(configPath());
   if (!config) return null;
-  if (typeof config.apiKey !== 'string' || !config.apiKey) return null;
+  if (typeof config.host !== 'string' || !config.host) return null;
+  if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) return null;
+  if (typeof config.user !== 'string' || !config.user) return null;
+  if (typeof config.pass !== 'string' || !config.pass) return null;
   if (!validEmail(config.senderEmail)) return null;
   return config;
 }
 
 function publicConfig(config) {
   return {
-    configured: Boolean(config && config.apiKey && config.senderEmail),
+    configured: Boolean(config),
     senderEmail: config?.senderEmail ?? '',
     senderName: config?.senderName ?? '',
+    host: config?.host ?? '',
+    port: config?.port ?? 587,
+    user: config?.user ?? '',
   };
 }
 
@@ -105,26 +112,29 @@ function emailBody(code) {
 
 async function sendCode(config, to, code) {
   const { html, text } = emailBody(code);
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-    method: 'POST',
-    headers: {
-      'api-key': config.apiKey,
-      accept: 'application/json',
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({
-      sender: { email: config.senderEmail, name: config.senderName || 'Editorial Studio' },
-      to: [{ email: to }],
-      subject: `${code} — connexion à Editorial Studio`,
-      htmlContent: html,
-      textContent: text,
-    }),
-    signal: AbortSignal.timeout(15000),
+  const transport = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: Boolean(config.secure) || config.port === 465,
+    auth: { user: config.user, pass: config.pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
   });
 
-  if (!response.ok) {
-    const detail = (await response.text()).slice(0, 300);
-    throw new Error(`Envoi refusé par Brevo (${response.status}). ${detail}`);
+  try {
+    await transport.sendMail({
+      from: { name: config.senderName || 'Editorial Studio', address: config.senderEmail },
+      to,
+      subject: `${code} — connexion à Editorial Studio`,
+      text,
+      html,
+    });
+  } catch (error) {
+    // Le message SMTP ne contient pas le mot de passe ; on garde le détail utile.
+    throw new Error(`Envoi SMTP impossible : ${error instanceof Error ? error.message : String(error)}`);
+  } finally {
+    transport.close();
   }
 }
 
@@ -216,16 +226,25 @@ async function logout() {
 }
 
 async function configure(input) {
-  const apiKey = typeof input?.apiKey === 'string' ? input.apiKey.trim() : '';
+  const host = typeof input?.host === 'string' ? input.host.trim() : '';
+  const port = Number(input?.port);
+  const secure = Boolean(input?.secure);
+  const user = typeof input?.user === 'string' ? input.user.trim() : '';
+  const pass = typeof input?.pass === 'string' ? input.pass : '';
   const senderEmail =
     typeof input?.senderEmail === 'string' ? input.senderEmail.trim().toLowerCase() : '';
   const senderName =
     typeof input?.senderName === 'string' ? input.senderName.trim().slice(0, 60) : '';
 
-  if (apiKey.length < 10) throw new Error('Clé API Brevo invalide ou trop courte.');
+  if (!host) throw new Error('Serveur SMTP obligatoire.');
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('Port SMTP invalide (1 à 65535).');
+  }
+  if (!user) throw new Error('Identifiant SMTP obligatoire.');
+  if (!pass) throw new Error('Mot de passe SMTP obligatoire.');
   if (!validEmail(senderEmail)) throw new Error('Adresse expéditrice invalide.');
 
-  const config = { apiKey, senderEmail, senderName };
+  const config = { host, port, secure, user, pass, senderEmail, senderName };
   await writeJson(configPath(), config);
   return publicConfig(config);
 }
