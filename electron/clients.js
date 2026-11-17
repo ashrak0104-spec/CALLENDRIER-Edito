@@ -158,6 +158,32 @@ async function create(rawName) {
   return metaFor(client);
 }
 
+async function rename(id, rawName) {
+  const name = cleanName(rawName);
+  const index = await ensureIndex();
+  const client = index.clients.find((entry) => entry.id === id);
+  if (!client) throw new Error('Client introuvable.');
+  client.name = name;
+  await saveIndex(index);
+  return metaFor(client);
+}
+
+async function remove(id) {
+  const index = await ensureIndex();
+  const client = index.clients.find((entry) => entry.id === id);
+  if (!client) throw new Error('Client introuvable.');
+
+  // Le fichier d'abord : si sa suppression échoue, l'index reste intact et
+  // aucun autre client n'est modifié.
+  await fs.rm(dataPathFor(client.id), { force: true });
+
+  index.clients = index.clients.filter((entry) => entry.id !== client.id);
+  if (index.activeClientId === client.id) index.activeClientId = null;
+  blocked.delete(client.id);
+  await saveIndex(index);
+  return { ok: true, id: client.id, activeClientId: index.activeClientId };
+}
+
 async function loadActive() {
   const index = await ensureIndex();
   if (!index.activeClientId) {
@@ -262,6 +288,8 @@ module.exports = {
   currentDataPath,
   select,
   create,
+  rename,
+  remove,
   loadActive,
   resolveActive,
   saveActiveData,

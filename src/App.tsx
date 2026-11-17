@@ -59,6 +59,8 @@ export default function App() {
     loadError,
     selectClient,
     createClient,
+    renameClient,
+    deleteClient,
     openClientPicker,
     retryClientLoad,
     restoreClientFromBackup,
@@ -147,6 +149,8 @@ export default function App() {
         email={auth.email}
         onSelect={(id) => void selectClient(id)}
         onCreate={createClient}
+        onRename={renameClient}
+        onDelete={deleteClient}
         onSignOut={() => void signOut()}
       />
     );

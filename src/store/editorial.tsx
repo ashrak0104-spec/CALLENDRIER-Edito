@@ -33,6 +33,8 @@ interface EditorialContextValue {
   loadError: ClientLoadError | null;
   selectClient: (id: string) => Promise<void>;
   createClient: (name: string) => Promise<void>;
+  renameClient: (id: string, name: string) => Promise<void>;
+  deleteClient: (id: string) => Promise<void>;
   openClientPicker: () => Promise<void>;
   retryClientLoad: () => Promise<boolean>;
   restoreClientFromBackup: () => Promise<{ canceled: boolean; error?: string; count?: number }>;
@@ -153,6 +155,40 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       }
     },
     [flush, enterClient],
+  );
+
+  const renameClient = useCallback(
+    async (id: string, name: string) => {
+      const result = await api.clientsRename(id, name);
+      if (!result.ok) throw new Error(result.error ?? 'Renommage impossible.');
+      if (activeClient?.id === id && result.client) setActiveClient(result.client);
+      try {
+        setClients(await api.clientsList());
+      } catch {
+        /* ignore */
+      }
+    },
+    [activeClient],
+  );
+
+  const deleteClient = useCallback(
+    async (id: string) => {
+      const result = await api.clientsDelete(id);
+      if (!result.ok) throw new Error(result.error ?? 'Suppression impossible.');
+      if (activeClient?.id === id) {
+        setActiveClient(null);
+        setReady(false);
+        setLoadError(null);
+        setItems([]);
+        setSaveState('idle');
+      }
+      try {
+        setClients(await api.clientsList());
+      } catch {
+        /* ignore */
+      }
+    },
+    [activeClient],
   );
 
   const openClientPicker = useCallback(async () => {
@@ -330,6 +366,8 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       loadError,
       selectClient,
       createClient,
+      renameClient,
+      deleteClient,
       openClientPicker,
       retryClientLoad,
       restoreClientFromBackup,
@@ -351,6 +389,8 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       loadError,
       selectClient,
       createClient,
+      renameClient,
+      deleteClient,
       openClientPicker,
       retryClientLoad,
       restoreClientFromBackup,

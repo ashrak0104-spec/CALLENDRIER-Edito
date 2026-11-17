@@ -96,6 +96,14 @@ export interface DesktopApi {
   clientsActive: () => Promise<string | null>;
   clientsSelect: (id: string) => Promise<ClientMeta>;
   clientsCreate: (name: string) => Promise<ClientMeta>;
+  clientsRename: (id: string, name: string) => Promise<ClientMutationResult>;
+  clientsDelete: (id: string) => Promise<{ ok: boolean; error?: string }>;
+}
+
+export interface ClientMutationResult {
+  ok: boolean;
+  client?: ClientMeta;
+  error?: string;
 }
 
 declare global {
@@ -349,6 +357,27 @@ const browserApi: DesktopApi = {
     index.activeClientId = client.id;
     writeBrowserIndex(index);
     return browserMeta(client);
+  },
+  clientsRename: async (id, name) => {
+    const cleaned = name.trim().replace(/\s+/g, ' ');
+    if (!cleaned) return { ok: false, error: 'Le nom du client est obligatoire.' };
+    const index = readBrowserIndex();
+    const client = index.clients.find((entry) => entry.id === id);
+    if (!client) return { ok: false, error: 'Client introuvable.' };
+    client.name = cleaned.slice(0, 60);
+    writeBrowserIndex(index);
+    return { ok: true, client: browserMeta(client) };
+  },
+  clientsDelete: async (id) => {
+    const index = readBrowserIndex();
+    if (!index.clients.some((entry) => entry.id === id)) {
+      return { ok: false, error: 'Client introuvable.' };
+    }
+    localStorage.removeItem(clientDataKey(id));
+    index.clients = index.clients.filter((entry) => entry.id !== id);
+    if (index.activeClientId === id) index.activeClientId = null;
+    writeBrowserIndex(index);
+    return { ok: true };
   },
 };
 

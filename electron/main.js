@@ -135,6 +135,22 @@ ipcMain.handle('clients:select', async (_event, id) => {
 
 ipcMain.handle('clients:create', async (_event, name) => clients.create(name));
 
+ipcMain.handle('clients:rename', async (_event, id, name) => {
+  try {
+    return { ok: true, client: await clients.rename(id, name) };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+ipcMain.handle('clients:delete', async (_event, id) => {
+  try {
+    return await clients.remove(id);
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
 /* ------------------------------------------------------------------ */
 /* IPC : backup / CSV                                                   */
 /* ------------------------------------------------------------------ */

@@ -26,4 +26,6 @@ contextBridge.exposeInMainWorld('desktop', {
   clientsActive: () => ipcRenderer.invoke('clients:active'),
   clientsSelect: (id) => ipcRenderer.invoke('clients:select', id),
   clientsCreate: (name) => ipcRenderer.invoke('clients:create', name),
+  clientsRename: (id, name) => ipcRenderer.invoke('clients:rename', id, name),
+  clientsDelete: (id) => ipcRenderer.invoke('clients:delete', id),
 });
