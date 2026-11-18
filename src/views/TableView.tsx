@@ -68,6 +68,7 @@ export default function TableView({ onOpen, onCreate }: TableViewProps) {
   const [pillar, setPillar] = useState<'all' | Pillar>('all');
   const [format, setFormat] = useState<'all' | Format>('all');
   const [month, setMonth] = useState('');
+  const [dateFilter, setDateFilter] = useState<'all' | 'overdue' | 'next-week' | 'unscheduled'>('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<{ key: SortKey; direction: 'asc' | 'desc' }>({
     key: 'scheduledDate',
@@ -89,6 +90,7 @@ export default function TableView({ onOpen, onCreate }: TableViewProps) {
     pillar !== 'all' ||
     format !== 'all' ||
     month !== '' ||
+    dateFilter !== 'all' ||
     query.trim() !== '';
 
   const resetFilters = () => {
@@ -97,19 +99,39 @@ export default function TableView({ onOpen, onCreate }: TableViewProps) {
     setPillar('all');
     setFormat('all');
     setMonth('');
+    setDateFilter('all');
     setQuery('');
   };
 
   const filtered = useMemo(() => {
     const search = query.trim().toLowerCase();
+    const now = Date.now();
+    const weekAhead = now + 7 * 24 * 60 * 60 * 1000;
     const list = items.filter((item) => {
       if (platform !== 'all' && item.platform !== platform) return false;
       if (status !== 'all' && item.status !== status) return false;
       if (pillar !== 'all' && item.pillar !== pillar) return false;
       if (format !== 'all' && item.format !== format) return false;
       if (month && (!item.scheduledDate || monthKeyOf(item.scheduledDate) !== month)) return false;
+      const scheduledTime = item.scheduledDate ? new Date(item.scheduledDate).getTime() : NaN;
+      if (dateFilter === 'unscheduled' && item.scheduledDate) return false;
+      if (dateFilter === 'overdue' && (item.status === 'Publié' || !item.scheduledDate || scheduledTime >= now)) {
+        return false;
+      }
+      if (
+        dateFilter === 'next-week' &&
+        (item.status === 'Publié' || !item.scheduledDate || scheduledTime < now || scheduledTime > weekAhead)
+      ) return false;
       if (search) {
-        const haystack = [item.title, item.content, item.assignee, item.tags.join(' ')]
+        const haystack = [
+          item.title,
+          item.content,
+          item.assignee,
+          item.platform,
+          item.format,
+          item.tags.join(' '),
+          item.assets.map((asset) => `${asset.label} ${asset.target}`).join(' '),
+        ]
           .join(' ')
           .toLowerCase();
         if (!haystack.includes(search)) return false;
@@ -132,7 +154,7 @@ export default function TableView({ onOpen, onCreate }: TableViewProps) {
           return (parseTime(a.scheduledDate) - parseTime(b.scheduledDate)) * factor;
       }
     });
-  }, [items, platform, status, pillar, format, month, query, sort]);
+  }, [items, platform, status, pillar, format, month, dateFilter, query, sort]);
 
   const selectClass = 'field-sm w-full max-w-[190px]';
 
@@ -214,6 +236,19 @@ export default function TableView({ onOpen, onCreate }: TableViewProps) {
             onChange={(event) => setMonth(event.target.value)}
             aria-label="Filtrer par mois"
           />
+          <select
+            className={selectClass}
+            value={dateFilter}
+            onChange={(event) =>
+              setDateFilter(event.target.value as 'all' | 'overdue' | 'next-week' | 'unscheduled')
+            }
+            aria-label="Filtrer par échéance"
+          >
+            <option value="all">Toutes les échéances</option>
+            <option value="overdue">En retard</option>
+            <option value="next-week">À venir sous 7 jours</option>
+            <option value="unscheduled">Sans date</option>
+          </select>
           {hasFilters && (
             <button type="button" className="btn-ghost !px-2.5 !py-1.5 text-xs" onClick={resetFilters}>
               <X size={13} />

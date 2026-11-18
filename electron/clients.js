@@ -4,6 +4,7 @@ const { app } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const crypto = require('node:crypto');
+const { planSheetSync } = require('./sheet-sync');
 
 /**
  * Un fichier de données par client, plus un index `clients.json`.
@@ -107,6 +108,13 @@ async function metaFor(client) {
     updatedAt:
       typeof data?.updatedAt === 'string' ? data.updatedAt : client.createdAt ?? new Date(0).toISOString(),
     itemCount: Array.isArray(data?.items) ? data.items.length : 0,
+    // Lien vers la feuille de clients : absent pour un client créé à la main.
+    ...(typeof client.sheetKey === 'string' && client.sheetKey ? { sheetKey: client.sheetKey } : {}),
+    ...(client.sheetMissing === true ? { sheetMissing: true } : {}),
+    // Lien vers le calendrier Google Sheets du client (saisi dans le picker).
+    ...(typeof client.sheetId === 'string' && client.sheetId && typeof client.sheetUrl === 'string'
+      ? { sheetId: client.sheetId, sheetUrl: client.sheetUrl }
+      : {}),
   };
 }
 
@@ -181,7 +189,93 @@ async function remove(id) {
   if (index.activeClientId === client.id) index.activeClientId = null;
   blocked.delete(client.id);
   await saveIndex(index);
-  return { ok: true, id: client.id, activeClientId: index.activeClientId };
+  // `sheetKey` permet à l'appelant d'empêcher la réapparition du client au prochain import.
+  return {
+    ok: true,
+    id: client.id,
+    activeClientId: index.activeClientId,
+    ...(typeof client.sheetKey === 'string' && client.sheetKey ? { sheetKey: client.sheetKey } : {}),
+  };
+}
+
+/**
+ * Feuille de calendrier liée à un client (lien Google Sheets collé dans le picker).
+ * Une chaîne vide retire le lien sans toucher au calendrier.
+ */
+async function setSheet(id, rawUrl) {
+  const index = await ensureIndex();
+  const client = index.clients.find((entry) => entry.id === id);
+  if (!client) throw new Error('Client introuvable.');
+
+  const value = typeof rawUrl === 'string' ? rawUrl.trim() : '';
+  if (!value) {
+    delete client.sheetId;
+    delete client.sheetUrl;
+    await saveIndex(index);
+    return metaFor(client);
+  }
+
+  const fromUrl = /\/d\/([A-Za-z0-9_-]{20,})/.exec(value);
+  const sheetId = fromUrl ? fromUrl[1] : value;
+  if (!/^[A-Za-z0-9_-]{20,}$/.test(sheetId)) {
+    throw new Error(
+      'Lien Google Sheets invalide : collez une adresse contenant /spreadsheets/d/<identifiant>/edit.',
+    );
+  }
+
+  client.sheetId = sheetId;
+  client.sheetUrl = fromUrl
+    ? value
+    : `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+  await saveIndex(index);
+  return metaFor(client);
+}
+
+/**
+ * Remplace le calendrier d'un client par les contenus importés d'une feuille.
+ * Le fichier existant est conservé à côté (`.backup-<horodatage>.json`), comme pour
+ * une restauration manuelle : un import ne doit jamais détruire de données sans trace.
+ */
+async function replaceCalendar(id, items) {
+  const index = await ensureIndex();
+  const client = index.clients.find((entry) => entry.id === id);
+  if (!client) throw new Error('Client introuvable.');
+  if (!Array.isArray(items)) throw new Error('Contenus invalides : un tableau est attendu.');
+
+  const file = dataPathFor(client.id);
+  const backup = await preserveExisting(file);
+  const payload = { version: 1, updatedAt: new Date().toISOString(), items };
+  await writeJson(file, payload);
+  blocked.delete(client.id);
+  return { ok: true, items: items.length, file, backup, data: payload };
+}
+
+/**
+ * Import feuille → application. Les clients créés démarrent vides ; les fichiers de
+ * données existants ne sont jamais écrasés, et aucun client n'est supprimé.
+ */
+async function syncFromSheet(rows, options = {}) {
+  const index = await ensureIndex();
+  const plan = planSheetSync(index, rows, options);
+  const now = new Date().toISOString();
+
+  try {
+    for (const client of plan.create) {
+      const file = dataPathFor(client.id);
+      if ((await readStrict(file)) !== null) continue;
+      await writeJson(file, { version: 1, updatedAt: now, items: [] });
+    }
+  } catch (error) {
+    // Les fichiers sont écrits avant l'index : un échec ici laisse l'index intact.
+    throw new Error(
+      `Création des calendriers impossible : ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  if (plan.changed) await saveIndex(plan.index);
+
+  const clients = await Promise.all(plan.index.clients.map((client) => metaFor(client)));
+  return { report: plan.report, clients };
 }
 
 async function loadActive() {
@@ -281,6 +375,58 @@ async function saveActiveData(payload) {
   return { path: dataPathFor(index.activeClientId) };
 }
 
+async function createScheduledBackups(retentionDays = 30) {
+  const index = await ensureIndex();
+  const backupRoot = path.join(app.getPath('userData'), 'backups', 'scheduled');
+  const now = new Date();
+  const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(
+    now.getDate(),
+  ).padStart(2, '0')}`;
+  const dayDir = path.join(backupRoot, date);
+  await fs.mkdir(dayDir, { recursive: true });
+
+  let created = 0;
+  for (const client of index.clients) {
+    const source = dataPathFor(client.id);
+    const target = path.join(dayDir, `${encodeURIComponent(client.id)}.json`);
+    const temporary = `${target}.${process.pid}-${crypto.randomBytes(4).toString('hex')}.tmp`;
+
+    try {
+      await fs.access(target);
+      continue;
+    } catch (error) {
+      if (error?.code !== 'ENOENT') throw error;
+    }
+
+    try {
+      await fs.copyFile(source, temporary);
+      await fs.rename(temporary, target);
+      created++;
+    } catch (error) {
+      await fs.rm(temporary, { force: true });
+      if (error?.code === 'ENOENT') continue;
+      throw new Error(
+        `Sauvegarde automatique impossible pour ${client.name} : ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      );
+    }
+  }
+
+  const folders = (await fs.readdir(backupRoot, { withFileTypes: true }))
+    .filter((entry) => entry.isDirectory() && /^\d{4}-\d{2}-\d{2}$/.test(entry.name))
+    .map((entry) => entry.name)
+    .sort();
+  const expired = folders.slice(0, Math.max(0, folders.length - retentionDays));
+  for (const folder of expired) {
+    const target = path.join(backupRoot, folder);
+    if (path.dirname(target) !== backupRoot) throw new Error('Dossier de sauvegarde invalide.');
+    await fs.rm(target, { recursive: true, force: true });
+  }
+
+  return { created, directory: dayDir };
+}
+
 module.exports = {
   list,
   activeId,
@@ -290,7 +436,11 @@ module.exports = {
   create,
   rename,
   remove,
+  setSheet,
+  replaceCalendar,
+  syncFromSheet,
   loadActive,
   resolveActive,
   saveActiveData,
+  createScheduledBackups,
 };

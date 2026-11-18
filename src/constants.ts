@@ -2,6 +2,7 @@ import type { Format, Pillar, Platform, Status } from './types';
 
 export const PLATFORMS: readonly Platform[] = [
   'LinkedIn',
+  'Facebook',
   'Instagram',
   'TikTok',
   'YouTube',
@@ -38,6 +39,7 @@ export const PILLARS: readonly Pillar[] = [
 
 export const PLATFORM_META: Record<Platform, { color: string; limit: number; short: string }> = {
   LinkedIn: { color: '#0A66C2', limit: 3000, short: 'LinkedIn' },
+  Facebook: { color: '#1877F2', limit: 63206, short: 'Facebook' },
   Instagram: { color: '#E1306C', limit: 2200, short: 'Instagram' },
   TikTok: { color: '#FE2C55', limit: 2200, short: 'TikTok' },
   YouTube: { color: '#FF0000', limit: 5000, short: 'YouTube' },

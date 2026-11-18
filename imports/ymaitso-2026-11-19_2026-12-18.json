@@ -1,0 +1,250 @@
+{
+  "version": 1,
+  "updatedAt": "2026-11-18T11:09:09.881Z",
+  "items": [
+    {
+      "id": "0edc02e5-a4ae-4570-8733-0a832d7ce753",
+      "title": "Bienvenue chez Y’Maïtso",
+      "content": "Présentation officielle de la marque, de son univers, de sa vision et de son ambition.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Autorité",
+      "scheduledDate": "2026-11-19T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Marque Y’Maïtso"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "a68bf099-a4ae-43e2-bbee-ff59be2c4637",
+      "title": "L’univers Y’Maïtso",
+      "content": "Présentation visuelle de la marque, de son identité et de son univers. Création adaptée au langage Instagram.",
+      "platform": "Instagram",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Autorité",
+      "scheduledDate": "2026-11-19T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "6cec2308-e2d2-420c-820c-3488b866ef62",
+      "title": "Notre univers et nos produits",
+      "content": "Présenter l’univers Y’Maïtso et les familles de produits : miel, hibiscus, cookies et T-shirts.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-11-21T10:00:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Sélection de produits + T-shirts"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "d9cc74c5-0e8e-424b-9abd-1e2e4598908e",
+      "title": "Le miel Zahana, une référence rare",
+      "content": "Mettre en valeur le miel Zahana et son lien avec l’ONG Fanamby, selon les informations validées.",
+      "platform": "Facebook",
+      "format": "Post Texte",
+      "status": "Idée / Backlog",
+      "pillar": "Éducation",
+      "scheduledDate": "2026-11-24T12:15:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Miel Zahana"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "36751a45-8f9d-4946-a61e-793ccdde1a16",
+      "title": "L’hibiscus séché à découvrir",
+      "content": "Présenter le produit, son conditionnement et les informations d’origine disponibles.",
+      "platform": "Facebook",
+      "format": "Vidéo courte/Reel",
+      "status": "Idée / Backlog",
+      "pillar": "Éducation",
+      "scheduledDate": "2026-11-26T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Hibiscus séché"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "fd478f81-9b0b-43e0-b700-2d1a83580224",
+      "title": "Le miel Zahana en lumière",
+      "content": "Reel court et esthétique mettant en avant le pot Honey correspondant à la référence validée.",
+      "platform": "Instagram",
+      "format": "Vidéo courte/Reel",
+      "status": "Idée / Backlog",
+      "pillar": "Éducation",
+      "scheduledDate": "2026-11-27T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "8116b3c6-25e4-4e44-a744-11004c6c0be1",
+      "title": "Les cookies Light Y’Maïtso",
+      "content": "Présenter les cookies Light et leur positionnement sans gluten, conformément à la fiche produit.",
+      "platform": "Facebook",
+      "format": "Vidéo courte/Reel",
+      "status": "Idée / Backlog",
+      "pillar": "Éducation",
+      "scheduledDate": "2026-12-01T12:15:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Cookies Light"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "327989a6-f988-48ad-9444-e1bb2d70323c",
+      "title": "Portez les couleurs de Y’Maïtso",
+      "content": "Présentation commerciale des T-shirts disponibles, avec vues avant/arrière et photos portées fournies.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-12-03T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "T-shirts Y’Maïtso"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "dcba7a1c-29d4-43b3-9fa0-c2bfa99cb497",
+      "title": "Les T-shirts Y’Maïtso : portez la marque",
+      "content": "Reel présentant les T-shirts disponibles, en utilisant les photos réelles fournies (face et dos).",
+      "platform": "Instagram",
+      "format": "Vidéo courte/Reel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-12-05T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "03ad1788-b1aa-4777-a5a7-4a20a7fcbca0",
+      "title": "Les autres produits de la gamme",
+      "content": "Teaser des références complémentaires. Ne pas annoncer leur disponibilité sans confirmation.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Éducation",
+      "scheduledDate": "2026-12-08T12:15:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Autres références de la pricelist"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "7e79ab1b-511f-4499-bb62-de48a2c6617f",
+      "title": "Comment commander chez Y’Maïtso",
+      "content": "Expliquer les étapes de prise de contact et de commande avec les informations pratiques validées.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-12-10T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Sélection confirmée"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "8f035e46-48f7-43dd-bfa2-d029c0ed9b7f",
+      "title": "Des idées de cadeaux Y’Maïtso",
+      "content": "Mettre en scène les T-shirts et les propositions de coffrets, après confirmation de leur composition.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-12-15T12:15:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "T-shirts + coffrets sur commande"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "7ccb6551-12e5-4c62-a193-0c1990aefb3c",
+      "title": "La suite de l’aventure Y’Maïtso",
+      "content": "Publication de marque autour de l’univers Y’Maïtso et des prochaines nouveautés confirmées.",
+      "platform": "Facebook",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Actualité",
+      "scheduledDate": "2026-12-17T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [
+        "Marque et prochaines gammes"
+      ],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    },
+    {
+      "id": "665f02c0-f2ec-43b1-88a4-6c65c1ba2493",
+      "title": "Les idées cadeaux Y’Maïtso",
+      "content": "Présentation visuelle des idées cadeaux et coffrets, après validation de la composition et disponibilité.",
+      "platform": "Instagram",
+      "format": "Carrousel",
+      "status": "Idée / Backlog",
+      "pillar": "Conversion",
+      "scheduledDate": "2026-12-17T18:30:00",
+      "assignee": "LA CELLULE",
+      "tags": [],
+      "checklist": [],
+      "assets": [],
+      "createdAt": "2026-11-18T11:09:09.881Z",
+      "updatedAt": "2026-11-18T11:09:09.881Z"
+    }
+  ]
+}

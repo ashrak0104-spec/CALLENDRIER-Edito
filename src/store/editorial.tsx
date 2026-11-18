@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { DEFAULT_ASSIGNEE } from '../constants';
-import { api, type ClientDataFailure, type ClientMeta } from '../lib/api';
+import { api, type CalendarSyncResult, type ClientDataFailure, type ClientMeta, type ClientSheetResult, type ClientsSyncResult } from '../lib/api';
 import { parsePayload } from '../lib/normalize';
 import { uid } from '../lib/utils';
 import type { Platform, PostItem } from '../types';
@@ -35,6 +35,9 @@ interface EditorialContextValue {
   createClient: (name: string) => Promise<void>;
   renameClient: (id: string, name: string) => Promise<void>;
   deleteClient: (id: string) => Promise<void>;
+  syncClientsFromSheet: () => Promise<ClientsSyncResult>;
+  linkClientSheet: (id: string, url: string) => Promise<ClientSheetResult>;
+  syncClientCalendar: (id: string) => Promise<CalendarSyncResult>;
   openClientPicker: () => Promise<void>;
   retryClientLoad: () => Promise<boolean>;
   restoreClientFromBackup: () => Promise<{ canceled: boolean; error?: string; count?: number }>;
@@ -88,6 +91,16 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
         console.error('[editorial] liste des clients indisponible', error);
       } finally {
         setClientsLoading(false);
+      }
+
+      // Import feuille → application au démarrage. Silencieux : une feuille
+      // injoignable ne doit ni bloquer ni retarder l'ouverture du picker.
+      try {
+        const synced = await api.clientsSyncFromSheet();
+        if (synced.ok) setClients(synced.clients);
+        else console.warn('[editorial] import Google Sheets ignoré :', synced.error);
+      } catch (error) {
+        console.error('[editorial] import Google Sheets impossible', error);
       }
     })();
   }, []);
@@ -189,6 +202,49 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       }
     },
     [activeClient],
+  );
+
+  const syncClientsFromSheet = useCallback(async (): Promise<ClientsSyncResult> => {
+    const result = await api.clientsSyncFromSheet();
+    if (result.ok) {
+      const list = result.clients;
+      setClients(list);
+      // Le client ouvert peut avoir été renommé par l'import.
+      setActiveClient((previous) =>
+        previous ? list.find((client) => client.id === previous.id) ?? previous : previous,
+      );
+    }
+    return result;
+  }, []);
+
+  const linkClientSheet = useCallback(async (id: string, url: string): Promise<ClientSheetResult> => {
+    const result = await api.clientsSetSheet(id, url);
+    if (result.ok) {
+      setActiveClient((previous) =>
+        previous && previous.id === id ? { ...previous, ...result.client } : previous,
+      );
+      try {
+        setClients(await api.clientsList());
+      } catch {
+        /* ignore : la liste se rafraîchira au prochain passage */
+      }
+    }
+    return result;
+  }, []);
+
+  const syncClientCalendar = useCallback(
+    async (id: string): Promise<CalendarSyncResult> => {
+      const result = await api.clientsSyncCalendar(id);
+      if (!result.ok) return result;
+      setClients(result.clients);
+      // Le calendrier du client ouvert vient d'être remplacé : on le recharge.
+      if (activeClient?.id === id) {
+        const meta = result.clients.find((client) => client.id === id);
+        if (meta) await enterClient(meta);
+      }
+      return result;
+    },
+    [activeClient, enterClient],
   );
 
   const openClientPicker = useCallback(async () => {
@@ -368,6 +424,9 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       createClient,
       renameClient,
       deleteClient,
+      syncClientsFromSheet,
+      linkClientSheet,
+      syncClientCalendar,
       openClientPicker,
       retryClientLoad,
       restoreClientFromBackup,
@@ -391,6 +450,9 @@ export function EditorialProvider({ children }: { children: ReactNode }) {
       createClient,
       renameClient,
       deleteClient,
+      syncClientsFromSheet,
+      linkClientSheet,
+      syncClientCalendar,
       openClientPicker,
       retryClientLoad,
       restoreClientFromBackup,

@@ -78,12 +78,12 @@ export default function Sidebar({
           : 'Prêt';
 
   return (
-    <aside className="flex h-full w-[244px] shrink-0 flex-col border-r border-line bg-surface">
-      <div className="flex items-center gap-3 px-5 pb-5 pt-6">
+    <aside className="flex h-full w-16 shrink-0 flex-col border-r border-line bg-surface md:w-[244px]">
+      <div className="flex items-center justify-center gap-3 px-2 pb-5 pt-6 md:justify-start md:px-5">
         <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-indigo-500 to-violet-600 text-white shadow-lg shadow-indigo-500/25">
           <CalendarDays size={20} />
         </div>
-        <div className="min-w-0">
+        <div className="hidden min-w-0 md:block">
           <p className="truncate text-sm font-bold tracking-tight">Editorial Studio</p>
           <p className="truncate text-[11px] text-muted">Calendrier & production</p>
         </div>
@@ -93,18 +93,18 @@ export default function Sidebar({
         type="button"
         onClick={onSwitchClient}
         title="Changer de client"
-        className="mx-3 mb-5 flex items-center gap-2 rounded-xl border border-line bg-raised/50 px-3 py-2 text-left transition hover:border-accent/40 hover:bg-raised"
+        className="mx-1 mb-5 flex items-center justify-center gap-2 rounded-xl border border-line bg-raised/50 px-2 py-2 text-left transition hover:border-accent/40 hover:bg-raised md:mx-3 md:justify-start md:px-3"
       >
         <Building2 size={14} className="shrink-0 text-accent" />
-        <span className="min-w-0 flex-1">
+        <span className="hidden min-w-0 flex-1 md:block">
           <span className="block text-[10px] uppercase tracking-wider text-muted">Client</span>
           <span className="block truncate text-xs font-semibold">{clientName}</span>
         </span>
-        <ChevronsUpDown size={12} className="shrink-0 text-muted" />
+        <ChevronsUpDown size={12} className="hidden shrink-0 text-muted md:block" />
       </button>
 
-      <nav className="flex flex-col gap-1 px-3">
-        <p className="px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/70">
+      <nav className="flex flex-col gap-1 px-1.5 md:px-3">
+        <p className="hidden px-2 pb-1 text-[10px] font-semibold uppercase tracking-widest text-muted/70 md:block">
           Espace de travail
         </p>
         {NAV.map((entry) => {
@@ -114,16 +114,16 @@ export default function Sidebar({
             <button
               key={entry.id}
               type="button"
-              className={cx('nav-item', active && 'nav-item-active')}
+              className={cx('nav-item justify-center px-2 md:justify-start md:px-3', active && 'nav-item-active')}
               onClick={() => onViewChange(entry.id)}
               title={entry.description}
             >
               <Icon size={17} className="shrink-0" />
-              <span className="flex-1 text-left">{entry.label}</span>
+              <span className="hidden flex-1 text-left md:block">{entry.label}</span>
               {counts[entry.id] !== null && (
                 <span
                   className={cx(
-                    'rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                    'hidden rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums md:inline',
                     active ? 'bg-accent/15 text-accent' : 'bg-raised text-muted',
                   )}
                 >
@@ -135,7 +135,7 @@ export default function Sidebar({
         })}
       </nav>
 
-      <div className="mx-3 mt-6 rounded-xl border border-line bg-raised/60 p-3">
+      <div className="mx-2 mt-6 hidden rounded-xl border border-line bg-raised/60 p-3 md:block md:mx-3">
         <div className="flex items-center gap-2">
           <span
             className={cx(
@@ -154,18 +154,18 @@ export default function Sidebar({
         </p>
       </div>
 
-      <div className="mt-auto p-3">
-        <button type="button" className="nav-item" onClick={onOpenSettings}>
+      <div className="mt-auto p-1.5 md:p-3">
+        <button type="button" className="nav-item justify-center md:justify-start" onClick={onOpenSettings}>
           <Settings size={17} />
-          <span className="flex-1 text-left">Paramètres</span>
+          <span className="hidden flex-1 text-left md:block">Paramètres</span>
         </button>
-        <button type="button" className="nav-item" onClick={onToggleTheme}>
+        <button type="button" className="nav-item justify-center md:justify-start" onClick={onToggleTheme}>
           {theme === 'dark' ? <Sun size={17} /> : <Moon size={17} />}
-          <span className="flex-1 text-left">
+          <span className="hidden flex-1 text-left md:block">
             {theme === 'dark' ? 'Mode clair' : 'Mode sombre'}
           </span>
         </button>
-        <div className="mt-2 px-2">
+        <div className="mt-2 hidden px-2 md:block">
           <p className="truncate text-[10px] text-muted" title={dataPath}>
             {monthKey} · {items.length} contenus
           </p>

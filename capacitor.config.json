@@ -1,0 +1,8 @@
+{
+  "appId": "com.editorialstudio.app",
+  "appName": "Editorial Studio",
+  "webDir": "dist",
+  "android": {
+    "backgroundColor": "#0b1020"
+  }
+}

@@ -24,7 +24,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   const { items, replaceAll, dataPath, saveState } = useEditorial();
   const toast = useToast();
   const [version, setVersion] = useState('…');
-  const [busy, setBusy] = useState<'backup' | 'restore' | 'csv' | null>(null);
+  const [busy, setBusy] = useState<'backup' | 'restore' | 'csv' | 'scheduled' | null>(null);
   const [pendingRestore, setPendingRestore] = useState<PostItem[] | null>(null);
 
   useEffect(() => {
@@ -98,6 +98,18 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     }
   };
 
+  const openScheduledBackups = async () => {
+    setBusy('scheduled');
+    try {
+      await api.openScheduledBackups();
+    } catch (error) {
+      console.error('[settings] ouverture des sauvegardes impossible', error);
+      toast('Impossible d’ouvrir le dossier des sauvegardes automatiques.', 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6">
       <button
@@ -160,6 +172,26 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <p className="text-[11px] text-muted">
               Transférez votre calendrier d’un ordinateur à un autre via un fichier de sauvegarde.
             </p>
+
+            {isDesktop && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/5 p-3">
+                <div>
+                  <p className="text-xs font-semibold">Sauvegarde automatique quotidienne active</p>
+                  <p className="text-[10px] text-muted">
+                    Créée au démarrage, vérifiée toutes les 6 heures · conservation des 30 derniers jours.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="btn-ghost !py-1.5 text-xs"
+                  onClick={() => void openScheduledBackups()}
+                  disabled={busy !== null}
+                >
+                  <FolderOpen size={13} />
+                  Ouvrir les sauvegardes
+                </button>
+              </div>
+            )}
 
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               <button

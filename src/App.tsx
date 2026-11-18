@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, Plus } from 'lucide-react';
+import { BookOpen, CalendarDays, Plus } from 'lucide-react';
 import Sidebar from './components/Sidebar';
 import ItemDrawer from './components/ItemDrawer';
 import SettingsModal from './components/SettingsModal';
+import TemplateLibraryModal from './components/TemplateLibraryModal';
 import ClientSelectScreen from './components/ClientSelectScreen';
 import ClientDataErrorScreen from './components/ClientDataErrorScreen';
 import CalendarView from './views/CalendarView';
@@ -10,6 +11,8 @@ import KanbanView from './views/KanbanView';
 import TableView from './views/TableView';
 import DashboardView from './views/DashboardView';
 import { useEditorial } from './store/editorial';
+import { uid } from './lib/utils';
+import type { ContentTemplate } from './lib/templates';
 import type { DrawerTab, ViewId } from './types';
 
 type Theme = 'light' | 'dark';
@@ -59,6 +62,9 @@ export default function App() {
     createClient,
     renameClient,
     deleteClient,
+    syncClientsFromSheet,
+    linkClientSheet,
+    syncClientCalendar,
     openClientPicker,
     retryClientLoad,
     restoreClientFromBackup,
@@ -68,6 +74,7 @@ export default function App() {
   const [theme, setTheme] = useState<Theme>(readTheme);
   const [drawer, setDrawer] = useState<DrawerState | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [templatesOpen, setTemplatesOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
@@ -83,6 +90,21 @@ export default function App() {
     setDrawer({ itemId: created.id, tab: 'edit' });
   };
 
+  const startFromTemplate = (template: ContentTemplate) => {
+    const created = createItem({
+      title: template.title,
+      content: template.content,
+      platform: template.platform,
+      format: template.format,
+      pillar: template.pillar,
+      assignee: template.assignee,
+      tags: [...template.tags],
+      checklist: template.checklist.map((text) => ({ id: uid(), text, done: false })),
+    });
+    setTemplatesOpen(false);
+    setDrawer({ itemId: created.id, tab: 'edit' });
+  };
+
   if (!activeClient) {
     return (
       <ClientSelectScreen
@@ -92,6 +114,9 @@ export default function App() {
         onCreate={createClient}
         onRename={renameClient}
         onDelete={deleteClient}
+        onSync={syncClientsFromSheet}
+        onLinkSheet={linkClientSheet}
+        onSyncCalendar={syncClientCalendar}
       />
     );
   }
@@ -139,7 +164,7 @@ export default function App() {
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between gap-4 border-b border-line bg-bg/85 px-6 py-4 backdrop-blur">
+        <header className="flex items-center justify-between gap-2 border-b border-line bg-bg/85 px-3 py-3 backdrop-blur md:gap-4 md:px-6 md:py-4">
           <div className="min-w-0">
             <h1 className="truncate text-xl font-bold tracking-tight">{meta.title}</h1>
             <p className="mt-0.5 truncate text-xs text-muted">{meta.subtitle}</p>
@@ -148,14 +173,18 @@ export default function App() {
             <span className="hidden text-xs tabular-nums text-muted lg:inline">
               {items.length} contenu{items.length > 1 ? 's' : ''}
             </span>
+            <button type="button" className="btn-ghost" onClick={() => setTemplatesOpen(true)}>
+              <BookOpen size={15} />
+              <span className="hidden sm:inline">Modèles</span>
+            </button>
             <button type="button" className="btn-primary" onClick={() => startNewItem()}>
               <Plus size={16} />
-              Nouveau contenu
+              <span className="hidden sm:inline">Nouveau contenu</span>
             </button>
           </div>
         </header>
 
-        <main className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+        <main className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-3 py-4 md:px-6 md:py-5">
           {view === 'calendar' && <CalendarView onOpen={openItem} onCreate={startNewItem} />}
           {view === 'kanban' && <KanbanView onOpen={openItem} onCreate={() => startNewItem()} />}
           {view === 'table' && <TableView onOpen={openItem} onCreate={() => startNewItem()} />}
@@ -175,6 +204,13 @@ export default function App() {
         />
       )}
 
+      {templatesOpen && (
+        <TemplateLibraryModal
+          items={items}
+          onClose={() => setTemplatesOpen(false)}
+          onUse={startFromTemplate}
+        />
+      )}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
   );

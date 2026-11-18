@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import {
   ArrowRight,
+  AlertTriangle,
   BarChart3,
   CalendarDays,
   CheckCircle2,
@@ -97,10 +98,31 @@ export default function DashboardView({ onOpen, onGoToCalendar }: DashboardViewP
 
   const stats = useMemo(() => {
     const now = new Date();
+    const weekAhead = now.getTime() + 7 * 24 * 60 * 60 * 1000;
     const monthItems = items.filter(
       (item) => item.scheduledDate && monthKeyOf(item.scheduledDate) === currentMonth,
     );
     const publishedMonth = monthItems.filter((item) => item.status === 'Publié').length;
+    const overdue = items
+      .filter(
+        (item) =>
+          item.status !== 'Publié' &&
+          item.scheduledDate &&
+          new Date(item.scheduledDate).getTime() < now.getTime(),
+      )
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledDate ?? 0).getTime() - new Date(b.scheduledDate ?? 0).getTime(),
+      );
+    const dueSoon = items
+      .filter((item) => {
+        const time = item.scheduledDate ? new Date(item.scheduledDate).getTime() : NaN;
+        return item.status !== 'Publié' && time >= now.getTime() && time <= weekAhead;
+      })
+      .sort(
+        (a, b) =>
+          new Date(a.scheduledDate ?? 0).getTime() - new Date(b.scheduledDate ?? 0).getTime(),
+      );
     const inProduction = items.filter(
       (item) => item.status === 'Rédaction / Création' || item.status === 'En révision',
     ).length;
@@ -149,6 +171,8 @@ export default function DashboardView({ onOpen, onGoToCalendar }: DashboardViewP
     return {
       monthTotal: monthItems.length,
       publishedMonth,
+      overdue,
+      dueSoon,
       inProduction,
       scheduled,
       checklistTotal,
@@ -168,7 +192,7 @@ export default function DashboardView({ onOpen, onGoToCalendar }: DashboardViewP
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Kpi
           icon={BarChart3}
           label="Contenus"
@@ -182,6 +206,13 @@ export default function DashboardView({ onOpen, onGoToCalendar }: DashboardViewP
           value={`${stats.publishedMonth}/${stats.monthTotal}`}
           hint={`${percent(stats.publishedMonth, stats.monthTotal)}% du planning mensuel`}
           accent="#8B5CF6"
+        />
+        <Kpi
+          icon={AlertTriangle}
+          label="En retard"
+          value={String(stats.overdue.length)}
+          hint="À replanifier ou à publier"
+          accent="#EF4444"
         />
         <Kpi
           icon={TrendingUp}
@@ -198,6 +229,52 @@ export default function DashboardView({ onOpen, onGoToCalendar }: DashboardViewP
           accent="#10B981"
         />
       </div>
+
+      <section className="card p-4" aria-labelledby="dashboard-reminders">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 id="dashboard-reminders" className="text-sm font-semibold">Rappels éditoriaux</h2>
+            <p className="text-[11px] text-muted">Retards et publications prévues dans les 7 jours.</p>
+          </div>
+          <span className="rounded-full bg-rose-500/10 px-2 py-1 text-[10px] font-semibold text-rose-600 dark:text-rose-400">
+            {stats.overdue.length} en retard
+          </span>
+        </div>
+        <div className="mt-3 grid gap-2 lg:grid-cols-2">
+          {[
+            { label: 'À traiter', items: stats.overdue.slice(0, 4), late: true },
+            { label: 'À venir cette semaine', items: stats.dueSoon.slice(0, 4), late: false },
+          ].map((group) => (
+            <div key={group.label}>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted">
+                {group.label}
+              </p>
+              {group.items.length === 0 ? (
+                <p className="rounded-lg border border-dashed border-line px-3 py-3 text-xs text-muted">
+                  {group.late ? 'Aucun contenu en retard.' : 'Aucune publication prévue cette semaine.'}
+                </p>
+              ) : (
+                <div className="space-y-1">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => onOpen(item.id)}
+                      className="flex w-full items-center gap-2 rounded-lg border border-line bg-surface px-3 py-2 text-left transition hover:border-accent/40"
+                    >
+                      <span className={cx('shrink-0 text-[10px] font-semibold tabular-nums', group.late ? 'text-rose-500' : 'text-muted')}>
+                        {formatDayMonth(item.scheduledDate ?? '')}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-xs font-medium">{item.title || 'Sans titre'}</span>
+                      <span className="shrink-0 text-[10px] text-muted">{item.platform}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
         <div className="card p-4 lg:col-span-2">

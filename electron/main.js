@@ -4,48 +4,16 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs/promises');
 const clients = require('./clients');
-
-const gsheetConfigPath = () => path.join(app.getPath('userData'), 'gsheet-config.json');
-
-async function loadGsheetConfig() {
-  try {
-    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function readGsheetRows(google, spreadsheetId, range) {
-  const request = { spreadsheetId, ranges: [range], valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' };
-  const response = google.sheets('v4').spreadsheets.values.batchGet(request);
-  const batch = response.data.valueRanges || [];
-  const rows = [];
-  for (const entry of batch) {
-    if (entry.values) {
-      rows.push(entry.values);
-    }
-  }
-  return { rows: flattenRows(rows) };
-}
-
-function flattenRows(blocks) {
-  const out = [];
-  for (const block of blocks) {
-    for (const row of block) {
-      out.push(row);
-    }
-  }
-  return out;
-}
-
-
-/* Google Sheets : à compléter avec Google APIs
-
-Ce module est à compléter avec le SDK googleapis pour lire les cellules
-de la feuille configurée. Stocker les identifiants dans userData/gsheet-config.json.
+const gsheet = require('./gsheet');
+const sheetSync = require('./sheet-sync');
+const planningSync = require('./planning-sync');
 
 // The product name is used to derive app.getPath('userData').
 app.setName('Editorial Studio');
+
+// Feuille de calcul livrée par défaut ; modifiable dans userData/gsheet-config.json.
+const DEFAULT_SHEET_URL =
+  'https://docs.google.com/spreadsheets/d/1GQ3zneSlcLgMIRIwvHOrgbL8FJ92jm08iu1qMkfvbKM/edit?usp=sharing';
 
 const DEV_URL = process.env.VITE_DEV_SERVER_URL;
 let mainWindow = null;
@@ -71,58 +39,38 @@ async function readJsonFile(targetPath) {
 const errorMessage = (error) =>
   error instanceof Error ? error.message : String(error ?? 'Erreur inconnue');
 
-async function loadGsheetConfig() {
-  try {
-    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-function readGsheetRows(google, spreadsheetId, range) {
-  const request = { spreadsheetId, ranges: [range], valueRenderOption: 'UNFORMATTED_VALUE', dateTimeRenderOption: 'FORMATTED_STRING' };
-  const response = google.sheets('v4').spreadsheets.values.batchGet(request);
-  const batch = response.data.valueRanges || [];
-  const rows = [];
-  for (const entry of batch) {
-    if (entry.values) {
-      rows.push(entry.values);
-    }
-  }
-  return { rows: flattenRows(rows) };
-}
-
-function flattenRows(blocks) {
-  const out = [];
-  for (const block of blocks) {
-    for (const row of block) {
-      out.push(row);
-    }
-  }
-  return out;
-}
-
-const gsheetConfigPath = () => path.join(app.getPath('userData'), 'gsheet-config.json');
-
-async function loadGsheetConfig() {
-  try {
-    return JSON.parse(await fs.readFile(gsheetConfigPath(), 'utf8'));
-  } catch {
-    return null;
-  }
-}
-
-async async function loadGsheetTransport(config) {
-  const { google } = require('googleapis');
-  const { GoogleAuth } = require('google-auth-library');
-  const auth = new GoogleAuth({ keyFile: config?.credentialsPath });
-  const authClient = await auth.getClient();
-  google.options.auth = authClient;
-  return google;
+/** Compte les valeurs d'un champ : utilisé dans les rapports d'import. */
+function countBy(list, field) {
+  return list.reduce((counts, entry) => {
+    const key = String(entry[field] ?? '');
+    counts[key] = (counts[key] ?? 0) + 1;
+    return counts;
+  }, {});
 }
 
 /* ------------------------------------------------------------------ */
-/* Lifecycle
+/* Google Sheets                                                        */
+/* ------------------------------------------------------------------ */
+
+const userDataDir = () => app.getPath('userData');
+
+/**
+ * Crée userData/gsheet-config.json au premier lancement (feuille partagée par lien,
+ * mode « public »). Remplacer `auth` par un compte de service ou un refresh token
+ * OAuth donne accès aux feuilles privées ; voir electron/gsheet.js.
+ */
+async function ensureGsheetConfig() {
+  try {
+    await gsheet.ensureConfig(userDataDir(), { spreadsheetUrl: DEFAULT_SHEET_URL });
+  } catch (error) {
+    console.error('[gsheet] configuration par défaut impossible', error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Lifecycle                                                            */
+/* ------------------------------------------------------------------ */
+
 function today() {
   const d = new Date();
   const month = String(d.getMonth() + 1).padStart(2, '0');
@@ -205,6 +153,13 @@ ipcMain.handle('data:reveal', async () => {
   }
 });
 
+ipcMain.handle('backups:open', async () => {
+  const directory = path.join(userDataDir(), 'backups', 'scheduled');
+  await fs.mkdir(directory, { recursive: true });
+  const error = await shell.openPath(directory);
+  if (error) throw new Error(`Impossible d’ouvrir les sauvegardes : ${error}`);
+});
+
 /* ------------------------------------------------------------------ */
 /* IPC : clients                                                        */
 /* ------------------------------------------------------------------ */
@@ -238,7 +193,98 @@ ipcMain.handle('clients:rename', async (_event, id, name) => {
 
 ipcMain.handle('clients:delete', async (_event, id) => {
   try {
-    return await clients.remove(id);
+    const result = await clients.remove(id);
+    // Le client vient de la feuille : sa clé est mémorisée pour qu'il ne soit pas
+    // recréé au prochain import (docs/sync-google-sheets.md §5).
+    if (result.ok && result.sheetKey) {
+      try {
+        await gsheet.addIgnored(userDataDir(), result.sheetKey);
+      } catch (error) {
+        console.error('[gsheet] clé non mémorisée', error);
+      }
+    }
+    return result;
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/* IPC : calendrier d'un client ← sa feuille Google Sheets              */
+/* ------------------------------------------------------------------ */
+
+/** Responsable appliqué aux contenus importés sans colonne « Responsable ». */
+const CALENDAR_ASSIGNEE = 'Studio éditorial';
+
+ipcMain.handle('clients:set-sheet', async (_event, id, url) => {
+  try {
+    if (typeof id !== 'string' || !id) throw new Error('Identifiant client invalide.');
+    return { ok: true, client: await clients.setSheet(id, url) };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
+  }
+});
+
+/**
+ * Synchronise le calendrier d'un client avec les onglets de sa feuille (sens unique
+ * feuille → application : aucune écriture Google). Le calendrier est remplacé ;
+ * l'ancien fichier est conservé à côté.
+ */
+ipcMain.handle('clients:sync-calendar', async (_event, id) => {
+  try {
+    if (typeof id !== 'string' || !id) throw new Error('Identifiant client invalide.');
+    const meta = (await clients.list()).find((client) => client.id === id);
+    if (!meta) throw new Error('Client introuvable.');
+
+    const config = await gsheet.loadConfig(userDataDir());
+    const spreadsheetId = meta.sheetId || config?.spreadsheetId || '';
+    if (!spreadsheetId) {
+      throw new Error(
+        'Aucune feuille liée à ce client : collez son lien Google Sheets, il sera mémorisé.',
+      );
+    }
+
+    const tabs = [];
+    const problems = [];
+    for (const tab of planningSync.CALENDAR_TABS) {
+      try {
+        const { rows } = await gsheet.readRows(config ?? {}, spreadsheetId, `${tab}!A1:Z300`);
+        tabs.push({ title: tab, rows });
+      } catch (error) {
+        problems.push(`${tab} : ${errorMessage(error)}`);
+      }
+    }
+    if (tabs.length === 0) {
+      throw new Error(problems.join(' · ') || 'Feuille illisible.');
+    }
+
+    const mapped = planningSync.mapTabs(tabs, {
+      assignee: CALENDAR_ASSIGNEE,
+      now: new Date().toISOString(),
+    });
+    const warnings = [...problems, ...mapped.problems];
+    if (mapped.items.length === 0) {
+      return {
+        ok: false,
+        error: `Aucun contenu reconnu dans la feuille.${
+          warnings.length ? ` ${warnings.slice(0, 3).join(' · ')}` : ''
+        }`,
+      };
+    }
+
+    const written = await clients.replaceCalendar(id, mapped.items);
+    return {
+      ok: true,
+      report: {
+        items: mapped.items.length,
+        days: mapped.days,
+        platforms: countBy(mapped.items, 'platform'),
+        warnings,
+        backup: written.backup ?? null,
+        sheetId: spreadsheetId,
+      },
+      clients: await clients.list(),
+    };
   } catch (error) {
     return { ok: false, error: errorMessage(error) };
   }
@@ -274,7 +320,7 @@ ipcMain.handle('backup:import', async () => {
     return {
       canceled: false,
       filePath,
-      error: `Fichier illisible : ${error instanceof Error ? error.message : String(error)}`,
+      error: `Fichier illisible : ${errorMessage(error)}`,
     };
   }
 });
@@ -320,33 +366,49 @@ ipcMain.handle('shell:open', async (_event, target) => {
 
 ipcMain.handle('app:version', () => app.getVersion());
 
-ipcMain.handle('gsheet:read-rows', async (_event, spreadsheetId, range) => {
-  if (!spreadsheetId || typeof spreadsheetId !== 'string') {
-    throw new Error('Identifiant de feuille manquant.');
-  }
-  if (!range || typeof range !== 'string') {
-    throw new Error('Plage manquante.');
-  }
-  const config = await loadGsheetConfig();
-  if (!config?.credentialsPath) {
-    throw new Error('Compte Google non configuré.');
-  }
-  const transport = await loadGsheetTransport(config);
-  return readGsheetRows(transport, spreadsheetId, range);
-});
+/* ------------------------------------------------------------------ */
+/* IPC : Google Sheets                                                  */
+/* ------------------------------------------------------------------ */
 
-  if (!spreadsheetId || typeof spreadsheetId !== 'string') {
-    throw new Error('Identifiant de feuille manquant.');
+/**
+ * Import feuille → application. Lecture seule côté Google (aucune écriture dans la
+ * feuille) ; c'est le seul point d'entrée de la synchro.
+ */
+ipcMain.handle('clients:sync-sheets', async () => {
+  try {
+    const config = await gsheet.loadConfig(userDataDir());
+    if (!config) {
+      return {
+        ok: false,
+        error: `Configuration Google Sheets absente : ${gsheet.configPath(userDataDir())}`,
+      };
+    }
+    if (!config.spreadsheetId) {
+      return {
+        ok: false,
+        error: 'Aucune feuille configurée : renseignez "spreadsheetId" dans gsheet-config.json.',
+      };
+    }
+
+    const { rows } = await gsheet.readRows(config);
+    const parsed = sheetSync.parseSheetRows(rows);
+    const { report, clients: list } = await clients.syncFromSheet(parsed.clients, {
+      ignored: config.ignored,
+      renameMap: config.renameMap,
+    });
+
+    return {
+      ok: true,
+      clients: list,
+      report: {
+        ...report,
+        rowsRead: parsed.rowsRead,
+        duplicates: parsed.duplicates,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: errorMessage(error) };
   }
-  if (!range || typeof range !== 'string') {
-    throw new Error('Plage manquante.');
-  }
-  const config = await loadGsheetConfig();
-  if (!config?.credentialsPath) {
-    throw new Error('Compte Google non configuré.');
-  }
-  const google = await loadGsheetTransport(config);
-  return readGsheetRows(google, spreadsheetId, range);
 });
 
 /* ------------------------------------------------------------------ */
@@ -364,8 +426,22 @@ if (!gotLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     app.setAppUserModelId('com.editorialstudio.app');
+    await ensureGsheetConfig();
+    const backupDaily = async () => {
+      try {
+        const result = await clients.createScheduledBackups();
+        if (result.created > 0) {
+          console.info(`[backup] ${result.created} calendrier(s) sauvegardé(s) dans ${result.directory}`);
+        }
+      } catch (error) {
+        console.error('[backup] sauvegarde automatique impossible', error);
+      }
+    };
+    void backupDaily();
+    const backupTimer = setInterval(backupDaily, 6 * 60 * 60 * 1000);
+    backupTimer.unref();
     createWindow();
 
     app.on('activate', () => {

@@ -1,5 +1,6 @@
 export type Platform =
   | 'LinkedIn'
+  | 'Facebook'
   | 'Instagram'
   | 'TikTok'
   | 'YouTube'

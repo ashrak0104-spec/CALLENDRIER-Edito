@@ -1,5 +1,5 @@
 import type { EditorialPayload, PostItem } from '../types';
-import { gsheetReadRows } from './gsheet';
+import { importPublicCalendar } from './public-sheet-sync';
 
 export interface BackupResult {
   canceled: boolean;
@@ -24,7 +24,46 @@ export interface ClientMeta {
   createdAt: string;
   updatedAt: string;
   itemCount: number;
+  /** Clé de la ligne de feuille à l'origine du client (absente si créé à la main). */
+  sheetKey?: string;
+  /** Le client n'apparaît plus dans la feuille ; il n'est jamais supprimé pour autant. */
+  sheetMissing?: boolean;
+  /** Feuille de calendrier liée à ce client (lien collé dans le picker). */
+  sheetId?: string;
+  sheetUrl?: string;
 }
+
+/** Rapport d'une synchronisation calendrier ← onglets de la feuille du client. */
+export interface CalendarSyncReport {
+  items: number;
+  days: number;
+  platforms: Record<string, number>;
+  warnings: string[];
+  backup: string | null;
+  sheetId: string;
+}
+
+export type CalendarSyncResult =
+  | { ok: true; report: CalendarSyncReport; clients: ClientMeta[] }
+  | { ok: false; error: string };
+
+export type ClientSheetResult = { ok: true; client: ClientMeta } | { ok: false; error: string };
+
+/** Rapport d'un import feuille → application (docs/sync-google-sheets.md §6). */
+export interface SheetImportReport {
+  rowsRead: number;
+  created: string[];
+  updated: string[];
+  unchanged: number;
+  ambiguous: { name: string; candidates: number }[];
+  duplicates: { name: string; key: string }[];
+  missing: string[];
+  ignored: string[];
+}
+
+export type ClientsSyncResult =
+  | { ok: true; clients: ClientMeta[]; report: SheetImportReport }
+  | { ok: false; error: string };
 
 export type ClientDataFailure = 'missing' | 'unreadable';
 
@@ -36,19 +75,22 @@ export interface DesktopApi {
   saveData: (payload: EditorialPayload) => Promise<SaveResult>;
   getDataPath: () => Promise<string>;
   revealDataFile: () => Promise<void>;
+  openScheduledBackups: () => Promise<void>;
   exportBackup: (payload: EditorialPayload) => Promise<BackupResult>;
   importBackup: () => Promise<ImportResult>;
   exportCsv: (csv: string, suggestedName: string) => Promise<BackupResult>;
   pickAssets: () => Promise<string[]>;
   openTarget: (target: string) => Promise<void>;
   appVersion: () => Promise<string>;
-  gsheetReadRows: (spreadsheetId: string, range: string) => Promise<GsheetReadResult>;
+  clientsSyncFromSheet: () => Promise<ClientsSyncResult>;
   clientsList: () => Promise<ClientMeta[]>;
   clientsActive: () => Promise<string | null>;
   clientsSelect: (id: string) => Promise<ClientMeta>;
   clientsCreate: (name: string) => Promise<ClientMeta>;
   clientsRename: (id: string, name: string) => Promise<ClientMutationResult>;
   clientsDelete: (id: string) => Promise<{ ok: boolean; error?: string }>;
+  clientsSetSheet: (id: string, url: string) => Promise<ClientSheetResult>;
+  clientsSyncCalendar: (id: string) => Promise<CalendarSyncResult>;
 }
 
 export interface ClientDataResult {
@@ -63,10 +105,6 @@ export interface ClientMutationResult {
   ok: boolean;
   client?: ClientMeta;
   error?: string;
-}
-
-export interface GsheetReadResult {
-  rows: unknown[][];
 }
 
 declare global {
@@ -119,6 +157,8 @@ interface BrowserClient {
   id: string;
   name: string;
   createdAt: string;
+  sheetId?: string;
+  sheetUrl?: string;
 }
 
 interface BrowserIndex {
@@ -215,6 +255,9 @@ const browserApi: DesktopApi = {
       : 'localStorage (aucun client)';
   },
   revealDataFile: async () => undefined,
+  openScheduledBackups: async () => {
+    throw new Error('Les sauvegardes automatiques sont disponibles dans l’application desktop.');
+  },
   exportBackup: async (payload) => {
     download(
       `editorial-backup-${new Date().toISOString().slice(0, 10)}.json`,
@@ -236,7 +279,10 @@ const browserApi: DesktopApi = {
     window.open(target, '_blank', 'noopener,noreferrer');
   },
   appVersion: async () => '1.0.0 (navigateur)',
-  gsheetReadRows,
+  clientsSyncFromSheet: async () => ({
+    ok: false,
+    error: "La synchronisation Google Sheets n'est disponible que dans l'application desktop.",
+  }),
   clientsList: async () => readBrowserIndex().clients.map(browserMeta),
   clientsActive: async () => readBrowserIndex().activeClientId,
   clientsSelect: async (id) => {
@@ -274,6 +320,71 @@ const browserApi: DesktopApi = {
     client.name = cleaned.slice(0, 60);
     writeBrowserIndex(index);
     return { ok: true, client: browserMeta(client) };
+  },
+  clientsSetSheet: async (id, url) => {
+    const index = readBrowserIndex();
+    const client = index.clients.find((entry) => entry.id === id);
+    if (!client) return { ok: false, error: 'Client introuvable.' };
+
+    const value = url.trim();
+    if (!value) {
+      delete client.sheetId;
+      delete client.sheetUrl;
+    } else {
+      const fromUrl = /\/spreadsheets\/d\/([A-Za-z0-9_-]{20,})/.exec(value);
+      const sheetId = fromUrl?.[1] ?? value;
+      if (!/^[A-Za-z0-9_-]{20,}$/.test(sheetId)) {
+        return { ok: false, error: 'Lien Google Sheets invalide.' };
+      }
+      client.sheetId = sheetId;
+      client.sheetUrl = fromUrl
+        ? value
+        : `https://docs.google.com/spreadsheets/d/${sheetId}/edit`;
+    }
+
+    writeBrowserIndex(index);
+    return { ok: true, client: browserMeta(client) };
+  },
+  clientsSyncCalendar: async (id) => {
+    try {
+      const index = readBrowserIndex();
+      const client = index.clients.find((entry) => entry.id === id);
+      if (!client) return { ok: false, error: 'Client introuvable.' };
+      if (!client.sheetId) {
+        return { ok: false, error: 'Ajoutez d’abord le lien Google Sheets de ce client.' };
+      }
+
+      const { items, report } = await importPublicCalendar(client.sheetId);
+      const key = clientDataKey(client.id);
+      const previous = localStorage.getItem(key);
+      let backup: string | null = null;
+      if (previous !== null) {
+        backup = `editorial-studio:backup:v1:${encodeURIComponent(client.id)}:${Date.now()}`;
+        localStorage.setItem(backup, previous);
+        const prefix = `editorial-studio:backup:v1:${encodeURIComponent(client.id)}:`;
+        const oldBackups = Object.keys(localStorage)
+          .filter((entry) => entry.startsWith(prefix))
+          .sort()
+          .slice(0, -30);
+        oldBackups.forEach((entry) => localStorage.removeItem(entry));
+      }
+
+      localStorage.setItem(
+        key,
+        JSON.stringify({ version: 1, updatedAt: new Date().toISOString(), items }),
+      );
+      return {
+        ok: true,
+        report: { ...report, backup },
+        clients: index.clients.map(browserMeta),
+      };
+    } catch (error) {
+      console.error('[sheets] synchronisation mobile impossible', error);
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : 'Synchronisation Google Sheets impossible.',
+      };
+    }
   },
   clientsDelete: async (id) => {
     const index = readBrowserIndex();
